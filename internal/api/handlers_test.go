@@ -13,6 +13,28 @@ import (
 	"github.com/pyd-07/k6e/internal/store"
 )
 
+func testWorkload(name, namespace string) model.Workload {
+	return model.Workload{
+		APIVersion: "k6e.io/v1alpha1",
+		Kind:       "Workload",
+		Metadata: model.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: model.WorkloadSpec{
+			Replicas: 3,
+			Template: model.PodTemplateSpec{
+				Containers: []model.ContainerSpec{
+					{
+						Name:  "nginx",
+						Image: "nginx:latest",
+					},
+				},
+			},
+		},
+	}
+}
+
 func TestCreateWorkload(t *testing.T) {
 	ctx := context.Background()
 	workloadStore := store.NewMemoryStore()
@@ -143,7 +165,7 @@ func TestCreateWorkloadAlreadyExists(t *testing.T) {
 	workloadStore := store.NewMemoryStore()
 	server := NewServer(workloadStore)
 
-	workload := testWorkload()
+	workload := testWorkload("test-workload", "default")
 
 	if err := workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
@@ -188,7 +210,7 @@ func TestGetWorkload(t *testing.T) {
 	workloadStore := store.NewMemoryStore()
 	server := NewServer(workloadStore)
 
-	workload := testWorkload()
+	workload := testWorkload("test-workload", "default")
 
 	if err := workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
@@ -243,13 +265,9 @@ func TestWorkloadList(t *testing.T) {
 	workloadStore := store.NewMemoryStore()
 	server := NewServer(workloadStore)
 
-	workload1 := testWorkload()
-	workload2 := testWorkload()
-	workload3 := testWorkload()
-
-	workload2.Metadata.Name = "test-workload-2"
-	workload3.Metadata.Name = "other-workload"
-	workload3.Metadata.Namespace = "production"
+	workload1 := testWorkload("test-workload-1", "default")
+	workload2 := testWorkload("test-workload-2", "default")
+	workload3 := testWorkload("other-workload", "production")
 
 	if err := workloadStore.Create(context.Background(), workload1); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
@@ -315,7 +333,7 @@ func TestWorkloadDelete(t *testing.T) {
 	workloadStore := store.NewMemoryStore()
 	server := NewServer(workloadStore)
 
-	workload := testWorkload()
+	workload := testWorkload("test-workload", "default")
 	if err := workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
@@ -352,27 +370,5 @@ func TestWorkloadDeleteNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
-	}
-}
-
-func testWorkload() model.Workload {
-	return model.Workload{
-		APIVersion: "k6e.io/v1alpha1",
-		Kind:       "Workload",
-		Metadata: model.ObjectMeta{
-			Name:      "test-workload",
-			Namespace: "default",
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: 3,
-			Template: model.PodTemplateSpec{
-				Containers: []model.ContainerSpec{
-					{
-						Name:  "nginx",
-						Image: "nginx:latest",
-					},
-				},
-			},
-		},
 	}
 }

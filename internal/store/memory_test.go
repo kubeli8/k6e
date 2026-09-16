@@ -8,13 +8,13 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 )
 
-func testWorkload(name string) model.Workload {
+func testWorkload(name, namespace string) model.Workload {
 	return model.Workload{
 		APIVersion: "k6e.io/v1alpha1",
 		Kind:       "Workload",
 		Metadata: model.ObjectMeta{
 			Name:      name,
-			Namespace: "default",
+			Namespace: namespace,
 		},
 		Spec: model.WorkloadSpec{
 			Replicas: 2,
@@ -34,7 +34,7 @@ func TestMemoryStoreCreateAndGet(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	want := testWorkload("test-workload")
+	want := testWorkload("test-workload", "default")
 
 	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -58,7 +58,7 @@ func TestMemoryStoreDuplicateCreate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("test-workload")
+	workload := testWorkload("test-workload", "default")
 	if err := store.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -84,7 +84,7 @@ func TestMemoryStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("test-workload")
+	workload := testWorkload("test-workload", "default")
 
 	if err := store.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -116,9 +116,9 @@ func TestMemoryStoreList(t *testing.T) {
 	store := NewMemoryStore()
 
 	workloads := []model.Workload{
-		testWorkload("workload-1"),
-		testWorkload("workload-2"),
-		testWorkload("workload-3"),
+		testWorkload("workload-1", "default"),
+		testWorkload("workload-2", "default"),
+		testWorkload("workload-3", "other-namespace"),
 	}
 
 	workloads[0].Metadata.Namespace = "default"
