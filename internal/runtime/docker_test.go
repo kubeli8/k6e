@@ -29,7 +29,7 @@ func TestDockerRuntimeLifecycle(t *testing.T) {
 	if err := rt.Start(ctx, id); err != nil {
 		t.Fatalf("Failed to start container: %v", err)
 	}
-	
+
 	info, err := rt.Inspect(ctx, id)
 	if err != nil {
 		t.Fatalf("Failed to inspect container: %v", err)
