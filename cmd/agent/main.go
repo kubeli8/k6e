@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/pyd-07/k6e/internal/agent"
 	"github.com/pyd-07/k6e/internal/model"
@@ -25,7 +26,7 @@ func main() {
 	)
 	address := flag.String(
 		"address",
-		"localhost:8801",
+		"localhost:8081",
 		"node agent address",
 	)
 	flag.Parse()
@@ -50,33 +51,10 @@ func main() {
 
 	fmt.Println("Node Registered:", *nodeId)
 
-	id, err := ag.Run(ctx, runtime.ContainerSpec{
-		Name:    "kubelite-test",
-		Image:   "alpine",
-		Command: []string{"sleep", "60"},
-	})
-	if err != nil {
-		log.Fatalf("Failed to create container: %v", err)
+	agentServer := agent.NewServer(ag)
+	log.Printf("Agent API listening on %s\n", *address)
+
+	if err := http.ListenAndServe(*address, agentServer.Handler()); err != nil {
+		log.Fatalf("Failed to start agent server: %v", err)
 	}
-
-	fmt.Println("Running Container: ", id)
-
-	info, err := ag.Inspect(ctx, id)
-	if err != nil {
-		log.Fatalf("Failed to inspect container: %v", err)
-	}
-
-	fmt.Printf("Container state: %+v\n", info.State)
-
-	if err := ag.Stop(ctx, id); err != nil {
-		log.Fatalf("Failed to stop container: %v", err)
-	}
-
-	fmt.Println("Stopped Container: ", id)
-
-	if err := ag.Remove(ctx, id); err != nil {
-		log.Fatalf("Failed to remove container: %v", err)
-	}
-
-	fmt.Println("Removed Container: ", id)
 }
