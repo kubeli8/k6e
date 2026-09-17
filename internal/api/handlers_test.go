@@ -35,10 +35,23 @@ func testWorkload(name, namespace string) model.Workload {
 	}
 }
 
+func testNode(id, address string, status model.NodeStatus) model.Node {
+	return model.Node{
+		ID:      id,
+		Address: address,
+		Status:  status,
+	}
+}
+
+func testServer() *Server {
+	workloadStore := store.NewMemoryStore()
+	nodeStore := store.NewMemoryNodeStore()
+	return NewServer(workloadStore, nodeStore)
+}
+
 func TestCreateWorkload(t *testing.T) {
 	ctx := context.Background()
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	body := `{
 		"apiVersion": "k6e.io/v1alpha1",
@@ -74,7 +87,7 @@ func TestCreateWorkload(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", http.StatusCreated, rec.Code)
 	}
 
-	created, err := workloadStore.Get(ctx, "default", "test-workload")
+	created, err := server.workloadStore.Get(ctx, "default", "test-workload")
 	if err != nil {
 		t.Fatalf("Failed to get created workload: %v", err)
 	}
@@ -85,8 +98,7 @@ func TestCreateWorkload(t *testing.T) {
 }
 
 func TestCreateWorkloadInvalidJSON(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	body := `{
 		"apiVersion": "k6e.io/v1alpha1",
@@ -123,8 +135,7 @@ func TestCreateWorkloadInvalidJSON(t *testing.T) {
 }
 
 func TestCreateWorkloadInvalidData(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	body := `{
 		"apiVersion": "k6e.io/v1alpha1",
@@ -162,12 +173,9 @@ func TestCreateWorkloadInvalidData(t *testing.T) {
 }
 
 func TestCreateWorkloadAlreadyExists(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
-
-	if err := workloadStore.Create(context.Background(), workload); err != nil {
+	if err := server.workloadStore.Create(context.Background(), testWorkload("test-workload", "default")); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
 
@@ -207,12 +215,11 @@ func TestCreateWorkloadAlreadyExists(t *testing.T) {
 }
 
 func TestGetWorkload(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	workload := testWorkload("test-workload", "default")
 
-	if err := workloadStore.Create(context.Background(), workload); err != nil {
+	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
 
@@ -245,8 +252,7 @@ func TestGetWorkload(t *testing.T) {
 }
 
 func TestGetWorkloadNotFound(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -262,20 +268,19 @@ func TestGetWorkloadNotFound(t *testing.T) {
 }
 
 func TestWorkloadList(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	workload1 := testWorkload("test-workload-1", "default")
 	workload2 := testWorkload("test-workload-2", "default")
 	workload3 := testWorkload("other-workload", "production")
 
-	if err := workloadStore.Create(context.Background(), workload1); err != nil {
+	if err := server.workloadStore.Create(context.Background(), workload1); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
-	if err := workloadStore.Create(context.Background(), workload2); err != nil {
+	if err := server.workloadStore.Create(context.Background(), workload2); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
-	if err := workloadStore.Create(context.Background(), workload3); err != nil {
+	if err := server.workloadStore.Create(context.Background(), workload3); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
 
@@ -303,8 +308,7 @@ func TestWorkloadList(t *testing.T) {
 }
 
 func TestWorkloadListEmpty(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	req := httptest.NewRequest(
 		http.MethodGet,
@@ -330,11 +334,10 @@ func TestWorkloadListEmpty(t *testing.T) {
 }
 
 func TestWorkloadDelete(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	workload := testWorkload("test-workload", "default")
-	if err := workloadStore.Create(context.Background(), workload); err != nil {
+	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
 
@@ -350,19 +353,204 @@ func TestWorkloadDelete(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", http.StatusNoContent, rec.Code)
 	}
 
-	_, err := workloadStore.Get(context.Background(), "default", "test-workload")
+	_, err := server.workloadStore.Get(context.Background(), "default", "test-workload")
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("Expected workload to be deleted, but it still exists")
 	}
 }
 
 func TestWorkloadDeleteNotFound(t *testing.T) {
-	workloadStore := store.NewMemoryStore()
-	server := NewServer(workloadStore)
+	server := testServer()
 
 	req := httptest.NewRequest(
 		http.MethodDelete,
 		"/api/v1/workloads/default/nonexistent-workload",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestNodeRegistration(t *testing.T) {
+	server := testServer()
+
+	body := `{
+		"id": "test-node",
+		"address": "127.0.0.1:8080",
+		"status": "Ready"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Expected status code %d, got %d", http.StatusCreated, rec.Code)
+	}
+
+	node, err := server.nodeStore.GetNode(context.Background(), "test-node")
+	if err != nil {
+		t.Fatalf("Failed to get node: %v", err)
+	}
+
+	if node.ID != "test-node" {
+		t.Fatalf("Expected node ID 'test-node', got '%s'", node.ID)
+	}
+	if node.Address != "127.0.0.1:8080" {
+		t.Fatalf("Expected node address '127.0.0.1:8080', got '%s'", node.Address)
+	}
+	if node.Status != "Ready" {
+		t.Fatalf("Expected node status 'Ready', got '%s'", node.Status)
+	}
+}
+
+func TestNodeRegistrationWrongData(t *testing.T) {
+	server := testServer()
+
+	body := `{
+		"id": "op",
+		"address": "127.0.0.1:8080",
+		"status": "not-valid"
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("Expected status code %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
+func TestNodeGet(t *testing.T) {
+	server := testServer()
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/nodes/test-node",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var got model.Node
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if got.ID != node.ID {
+		t.Fatalf("Expected node ID %q, got %q", node.ID, got.ID)
+	}
+	if got.Address != node.Address {
+		t.Fatalf("Expected node address %q, got %q", node.Address, got.Address)
+	}
+	if got.Status != node.Status {
+		t.Fatalf("Expected node status %q, got %q", node.Status, got.Status)
+	}
+}
+
+func TestNodeGetNotFound(t *testing.T) {
+	server := testServer()
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/nodes/nonexistent-node",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestNodeList(t *testing.T) {
+	server := testServer()
+	node1 := testNode("node-1", "127.0.0.1:8080", model.NodeStatusReady)
+	node2 := testNode("node-2", "172.16.0.1:8080", model.NodeStatusNotReady)
+	if err := server.nodeStore.RegisterNode(context.Background(), node1); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+	if err := server.nodeStore.RegisterNode(context.Background(), node2); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/nodes",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var nodes []model.Node
+	if err := json.NewDecoder(rec.Body).Decode(&nodes); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(nodes) != 2 {
+		t.Fatalf("Expected 2 nodes, got %d", len(nodes))
+	}
+}
+
+func TestNodeRemove(t *testing.T) {
+	server := testServer()
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/nodes/test-node",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNoContent, rec.Code)
+	}
+
+	_, err := server.nodeStore.GetNode(context.Background(), "test-node")
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("Expected node to be removed, but it still exists")
+	}
+}
+
+func TestNodeRemoveNotFound(t *testing.T) {
+	server := testServer()
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/nodes/nonexistent-node",
 		nil,
 	)
 	rec := httptest.NewRecorder()

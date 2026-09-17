@@ -42,3 +42,16 @@ func validateWorkload(workload model.Workload) error {
 	}
 	return nil
 }
+
+func validateNode(node model.Node) error {
+	if strings.TrimSpace(node.ID) == "" {
+		return fmt.Errorf("node ID is required")
+	}
+	if strings.TrimSpace(node.Address) == "" {
+		return fmt.Errorf("node address is required")
+	}
+	if !model.IsValidNodeStatus(node.Status) {
+		return fmt.Errorf("node status must be either 'Ready' or 'NotReady'")
+	}
+	return nil
+}

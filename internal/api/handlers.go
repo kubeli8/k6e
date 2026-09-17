@@ -23,7 +23,7 @@ func (s *Server) createWorkload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.Create(r.Context(), workload); err != nil {
+	if err := s.workloadStore.Create(r.Context(), workload); err != nil {
 		switch {
 		case errors.Is(err, store.ErrAlreadyExists):
 			writeError(w, http.StatusConflict, "Workload already exists")
@@ -46,7 +46,7 @@ func (s *Server) listWorkloads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workloads, err := s.store.List(r.Context(), namespace)
+	workloads, err := s.workloadStore.List(r.Context(), namespace)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to list workloads")
 		return
@@ -66,7 +66,7 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workload, err := s.store.Get(r.Context(), namespace, name)
+	workload, err := s.workloadStore.Get(r.Context(), namespace, name)
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -91,12 +91,88 @@ func (s *Server) deleteWorkload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.Delete(r.Context(), namespace, name); err != nil {
+	if err := s.workloadStore.Delete(r.Context(), namespace, name); err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			writeError(w, http.StatusNotFound, "Workload not found")
 		default:
 			writeError(w, http.StatusInternalServerError, "Failed to delete workload")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) registerNode(w http.ResponseWriter, r *http.Request) {
+	var node model.Node
+
+	if err := json.NewDecoder(r.Body).Decode(&node); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+	if err := validateNode(node); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := s.nodeStore.RegisterNode(r.Context(), node); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to register node")
+	}
+
+	w.Header()
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(node)
+}
+
+func (s *Server) getNode(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		writeError(w, http.StatusBadRequest, "Node ID is required")
+		return
+	}
+
+	node, err := s.nodeStore.GetNode(r.Context(), id)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Node not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to retrieve node")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(node)
+}
+
+func (s *Server) listNodes(w http.ResponseWriter, r *http.Request) {
+	nodes, err := s.nodeStore.ListNodes(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to list nodes")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(nodes)
+}
+
+func (s *Server) removeNode(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		writeError(w, http.StatusBadRequest, "Node ID is required")
+		return
+	}
+
+	if err := s.nodeStore.RemoveNode(r.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Node not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to delete node")
 		}
 		return
 	}

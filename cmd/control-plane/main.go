@@ -17,13 +17,13 @@ func main() {
 	)
 	flag.Parse()
 
-	workloadStore, err := store.NewSQLiteStore(*dbPath)
+	store, err := store.NewSQLiteStore(*dbPath)
 	if err != nil {
-		log.Fatalf("Failed to create workload store: %v", err)
+		log.Fatalf("Failed to create store: %v", err)
 	}
-	defer workloadStore.Close()
+	defer store.Close()
 
-	server := api.NewServer(workloadStore)
+	server := api.NewServer(store, store)
 
 	log.Println("kubeli8 control plane listening on :8080")
 	log.Printf("using database: %s", *dbPath)

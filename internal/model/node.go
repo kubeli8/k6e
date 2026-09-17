@@ -12,3 +12,12 @@ type Node struct {
 	Address string     `json:"address"`
 	Status  NodeStatus `json:"status"`
 }
+
+func IsValidNodeStatus(status NodeStatus) bool {
+	switch status {
+	case NodeStatusReady, NodeStatusNotReady:
+		return true
+	default:
+		return false
+	}
+}
