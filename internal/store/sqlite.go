@@ -175,10 +175,21 @@ func (s *SQLiteStore) initializeSchema() error {
 		PRIMARY KEY (namespace, name)
 	);
 	`
+	createNodesTable := `
+	CREATE TABLE IF NOT EXISTS nodes(
+		id TEXT PRIMARY KEY,
+		address TEXT NOT NULL,
+		status TEXT NOT NULL
+	);
+	`
 
 	_, err := s.db.Exec(createWorkloadsTable)
 	if err != nil {
 		return fmt.Errorf("create workloads table: %w", err)
+	}
+	_, err = s.db.Exec(createNodesTable)
+	if err != nil {
+		return fmt.Errorf("create nodes table: %w", err)
 	}
 	return nil
 }
