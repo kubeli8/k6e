@@ -2,18 +2,33 @@ package agent
 
 import (
 	"context"
+	"errors"
 
+	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 type Agent struct {
-	runtime runtime.ContainerRuntime
+	runtime   runtime.ContainerRuntime
+	registrar NodeRegistrar
 }
 
-func New(rt runtime.ContainerRuntime) *Agent {
-	return &Agent{
+func New(rt runtime.ContainerRuntime, registrar ...NodeRegistrar) *Agent {
+	ag := &Agent{
 		runtime: rt,
 	}
+	if len(registrar) > 0 {
+		ag.registrar = registrar[0]
+	}
+	return ag
+}
+
+func (a *Agent) Register(ctx context.Context, node model.Node) error {
+	if a.registrar == nil {
+		return errors.New("node registrar not configured")
+	}
+
+	return a.registrar.Register(ctx, node)
 }
 
 func (a *Agent) Run(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {

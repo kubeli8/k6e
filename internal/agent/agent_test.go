@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 )
 
@@ -15,6 +16,12 @@ type FakeRuntime struct {
 	removeCalled bool
 
 	startError error
+}
+
+type FakeRegistrar struct {
+	registerCalled bool
+	registeredNode model.Node
+	registerError  error
 }
 
 func (f *FakeRuntime) Create(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
@@ -42,6 +49,12 @@ func (f *FakeRuntime) Stop(ctx context.Context, id runtime.ContainerID) error {
 func (f *FakeRuntime) Remove(ctx context.Context, id runtime.ContainerID) error {
 	f.removeCalled = true
 	return nil
+}
+
+func (f *FakeRegistrar) Register(ctx context.Context, node model.Node) error {
+	f.registerCalled = true
+	f.registeredNode = node
+	return f.registerError
 }
 
 func TestAgentRun(t *testing.T) {
@@ -116,5 +129,27 @@ func TestAgentContextCancellation(t *testing.T) {
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled error, got %v", err)
+	}
+}
+
+func TestAgentRegister(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	fakeRegistrar := &FakeRegistrar{}
+
+	ag := New(fakeRuntime, fakeRegistrar)
+
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+
+	err := ag.Register(context.Background(), node)
+	if err != nil {
+		t.Fatalf("Register() returned unexpected error: %v", err)
+	}
+
+	if !fakeRegistrar.registerCalled {
+		t.Error("expected Register() to be called on the registrar")
+	}
+
+	if fakeRegistrar.registeredNode != node {
+		t.Errorf("expected registered node to be %+v, got %+v", node, fakeRegistrar.registeredNode)
 	}
 }
