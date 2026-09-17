@@ -16,7 +16,7 @@ type NodeRegistrar interface {
 
 type HTTPNodeRegistrar struct {
 	baseURL string
-	client *http.Client
+	client  *http.Client
 }
 
 func NewHTTPNodeRegistrar(baseURL string) *HTTPNodeRegistrar {
@@ -53,6 +53,6 @@ func (r *HTTPNodeRegistrar) Register(ctx context.Context, node model.Node) error
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("node resgistration failed: status %s", resp.Status)
 	}
-	
+
 	return nil
 }
