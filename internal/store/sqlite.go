@@ -183,6 +183,21 @@ func (s *SQLiteStore) initializeSchema() error {
 	);
 	`
 
+	createAssignmentsTable := `
+	CREATE TABLE IF NOT EXISTS assignments (
+		id TEXT PRIMARY KEY,
+		workload_namespace TEXT NOT NULL,
+		workload_name TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		status TEXT NOT NULL,
+		container_id TEXT NOT NULL,
+		FOREIGN KEY (workload_namespace, workload_name)
+			REFERENCES workloads(namespace, name),
+		FOREIGN KEY (node_id)
+			REFERENCES nodes(id)
+	);
+	`
+
 	_, err := s.db.Exec(createWorkloadsTable)
 	if err != nil {
 		return fmt.Errorf("create workloads table: %w", err)
@@ -190,6 +205,10 @@ func (s *SQLiteStore) initializeSchema() error {
 	_, err = s.db.Exec(createNodesTable)
 	if err != nil {
 		return fmt.Errorf("create nodes table: %w", err)
+	}
+	_, err = s.db.Exec(createAssignmentsTable)
+	if err != nil {
+		return fmt.Errorf("create assignments table: %w", err)
 	}
 	return nil
 }
