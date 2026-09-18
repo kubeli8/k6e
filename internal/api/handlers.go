@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/store"
@@ -173,6 +174,26 @@ func (s *Server) removeNode(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "Node not found")
 		default:
 			writeError(w, http.StatusInternalServerError, "Failed to delete node")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) updateNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if strings.TrimSpace(id) == "" {
+		writeError(w, http.StatusBadRequest, "Node ID is required")
+		return
+	}
+
+	if err := s.nodeStore.UpdateHeartbeat(r.Context(), id, time.Now()); err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Node not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to update node heartbeat")
 		}
 		return
 	}

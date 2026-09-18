@@ -32,6 +32,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/nodes", s.listNodes)
 	mux.HandleFunc("GET /api/v1/nodes/{id}", s.getNode)
 	mux.HandleFunc("DELETE /api/v1/nodes/{id}", s.removeNode)
+	mux.HandleFunc("POST /api/v1/nodes/{id}/heartbeat", s.updateNodeHeartbeat)
 
 	return mux
 }

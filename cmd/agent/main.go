@@ -38,7 +38,8 @@ func main() {
 	}
 
 	registrar := agent.NewHTTPNodeRegistrar(*controlPlane)
-	ag := agent.New(rt, registrar)
+	heartbeater := agent.NewHTTPNodeHeartbeater(*controlPlane)
+	ag := agent.New(rt, registrar, heartbeater)
 
 	err = ag.Register(ctx, model.Node{
 		ID:      *nodeId,

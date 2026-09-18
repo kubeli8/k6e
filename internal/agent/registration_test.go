@@ -6,15 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 )
 
 func testNode(id, address string, status model.NodeStatus) model.Node {
 	return model.Node{
-		ID:      id,
-		Address: address,
-		Status:  status,
+		ID:            id,
+		Address:       address,
+		Status:        status,
+		LastHeartbeat: time.Now(),
 	}
 }
 

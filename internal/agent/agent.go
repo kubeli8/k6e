@@ -3,24 +3,24 @@ package agent
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 type Agent struct {
-	runtime   runtime.ContainerRuntime
-	registrar NodeRegistrar
+	runtime     runtime.ContainerRuntime
+	registrar   NodeRegistrar
+	heartbeater NodeHeartbeater
 }
 
-func New(rt runtime.ContainerRuntime, registrar ...NodeRegistrar) *Agent {
-	ag := &Agent{
-		runtime: rt,
+func New(rt runtime.ContainerRuntime, registrar NodeRegistrar, heartbeater NodeHeartbeater) *Agent {
+	return &Agent{
+		runtime:     rt,
+		registrar:   registrar,
+		heartbeater: heartbeater,
 	}
-	if len(registrar) > 0 {
-		ag.registrar = registrar[0]
-	}
-	return ag
 }
 
 func (a *Agent) Register(ctx context.Context, node model.Node) error {
@@ -29,6 +29,37 @@ func (a *Agent) Register(ctx context.Context, node model.Node) error {
 	}
 
 	return a.registrar.Register(ctx, node)
+}
+
+func (a *Agent) Heartbeat(ctx context.Context, nodeID string) error {
+	if a.heartbeater == nil {
+		return errors.New("node heartbeater not configured")
+	}
+
+	return a.heartbeater.Heartbeat(ctx, nodeID)
+}
+
+func (a *Agent) StartHeartbeat(ctx context.Context, nodeID string, interval time.Duration) error {
+	if a.heartbeater == nil {
+		return errors.New("node heartbeater not configured")
+	}
+	if interval <= 0 {
+		return errors.New("heartbeat interval must be greater than zero")
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := a.heartbeater.Heartbeat(ctx, nodeID); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (a *Agent) Run(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {

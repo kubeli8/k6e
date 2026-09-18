@@ -560,3 +560,48 @@ func TestNodeRemoveNotFound(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
 	}
 }
+
+func TestNodeUpdateHeartbeat(t *testing.T) {
+	server := testServer()
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes/test-node/heartbeat",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNoContent, rec.Code)
+	}
+
+	retrievedNode, err := server.nodeStore.GetNode(context.Background(), "test-node")
+	if err != nil {
+		t.Fatalf("Failed to get node: %v", err)
+	}
+
+	if retrievedNode.Status != model.NodeStatusReady {
+		t.Errorf("expected updated status 'Ready', got '%s'", retrievedNode.Status)
+	}
+}
+
+func TestNodeUpdateHeartbeatNotFound(t *testing.T) {
+	server := testServer()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/nodes/nonexistent-node/heartbeat",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}

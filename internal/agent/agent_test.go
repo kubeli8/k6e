@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
@@ -22,6 +24,14 @@ type FakeRegistrar struct {
 	registerCalled bool
 	registeredNode model.Node
 	registerError  error
+}
+
+type FakeHeartbeater struct {
+	mu sync.Mutex
+
+	heartbeatCalled bool
+	heartbeatNodeID string
+	heartbeatError  error
 }
 
 func (f *FakeRuntime) Create(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
@@ -57,10 +67,19 @@ func (f *FakeRegistrar) Register(ctx context.Context, node model.Node) error {
 	return f.registerError
 }
 
-func TestAgentRun(t *testing.T) {
-	fake := &FakeRuntime{}
+func (f *FakeHeartbeater) Heartbeat(ctx context.Context, nodeID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	ag := New(fake)
+	f.heartbeatCalled = true
+	f.heartbeatNodeID = nodeID
+	return f.heartbeatError
+}
+
+func TestAgentRun(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+
+	ag := New(fakeRuntime, nil, nil)
 
 	id, err := ag.Run(context.Background(), runtime.ContainerSpec{
 		Name:    "test",
@@ -76,21 +95,21 @@ func TestAgentRun(t *testing.T) {
 		t.Fatalf("expected container ID fake-container-123, got %s", id)
 	}
 
-	if !fake.createCalled {
+	if !fakeRuntime.createCalled {
 		t.Error("expected Create() to be called")
 	}
 
-	if !fake.startCalled {
+	if !fakeRuntime.startCalled {
 		t.Error("expected Start() to be called")
 	}
 }
 
 func TestAgentRunCleansUpOnStartError(t *testing.T) {
-	fake := &FakeRuntime{
+	fakeRuntime := &FakeRuntime{
 		startError: errors.New("start failed"),
 	}
 
-	ag := New(fake)
+	ag := New(fakeRuntime, nil, nil)
 
 	_, err := ag.Run(context.Background(), runtime.ContainerSpec{
 		Name:    "test",
@@ -102,15 +121,15 @@ func TestAgentRunCleansUpOnStartError(t *testing.T) {
 		t.Fatal("expected Run() to return an error")
 	}
 
-	if !fake.createCalled {
+	if !fakeRuntime.createCalled {
 		t.Error("expected Create() to be called")
 	}
 
-	if !fake.startCalled {
+	if !fakeRuntime.startCalled {
 		t.Error("expected Start() to be called")
 	}
 
-	if !fake.removeCalled {
+	if !fakeRuntime.removeCalled {
 		t.Error("expected Remove() to be called after Start() failed")
 	}
 }
@@ -119,8 +138,8 @@ func TestAgentContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	fake := &FakeRuntime{}
-	ag := New(fake)
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
 
 	_, err := ag.Run(ctx, runtime.ContainerSpec{
 		Name:    "test",
@@ -136,7 +155,7 @@ func TestAgentRegister(t *testing.T) {
 	fakeRuntime := &FakeRuntime{}
 	fakeRegistrar := &FakeRegistrar{}
 
-	ag := New(fakeRuntime, fakeRegistrar)
+	ag := New(fakeRuntime, fakeRegistrar, nil)
 
 	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
 
@@ -151,5 +170,99 @@ func TestAgentRegister(t *testing.T) {
 
 	if fakeRegistrar.registeredNode != node {
 		t.Errorf("expected registered node to be %+v, got %+v", node, fakeRegistrar.registeredNode)
+	}
+}
+
+func TestAgentRegisterWithoutRegistrar(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
+
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+
+	err := ag.Register(context.Background(), node)
+	if err == nil {
+		t.Fatal("expected error when registering without a registrar, got nil")
+	}
+}
+
+func TestAgentHeartbeat(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	fakeHeartbeater := &FakeHeartbeater{}
+
+	ag := New(fakeRuntime, nil, fakeHeartbeater)
+
+	err := ag.Heartbeat(context.Background(), "test-node")
+	if err != nil {
+		t.Fatalf("Heartbeat() returned unexpected error: %v", err)
+	}
+
+	fakeHeartbeater.mu.Lock()
+	heartbeatCalled := fakeHeartbeater.heartbeatCalled
+	heartbeatNodeID := fakeHeartbeater.heartbeatNodeID
+	fakeHeartbeater.mu.Unlock()
+
+	if !heartbeatCalled {
+		t.Error("expected Heartbeat() to be called on the heartbeater")
+	}
+
+	if heartbeatNodeID != "test-node" {
+		t.Errorf(
+			"expected heartbeat node ID to be 'test-node', got '%s'",
+			heartbeatNodeID,
+		)
+	}
+}
+
+func TestAgentHeartbeatWithoutHeartbeater(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
+
+	err := ag.Heartbeat(context.Background(), "test-node")
+	if err == nil {
+		t.Fatal("expected error when heartbeating without a heartbeater, got nil")
+	}
+}
+
+func TestAgentStartHeartbeat(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	fakeHeartbeater := &FakeHeartbeater{}
+
+	ag := New(fakeRuntime, nil, fakeHeartbeater)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+
+	go func() {
+		done <- ag.StartHeartbeat(ctx, "test-node", 10*time.Millisecond)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("StartHeartbeat() returned unexpected error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StartHeartbeat() did not stop after context cancellation")
+	}
+
+	fakeHeartbeater.mu.Lock()
+	heartbeatCalled := fakeHeartbeater.heartbeatCalled
+	heartbeatNodeID := fakeHeartbeater.heartbeatNodeID
+	fakeHeartbeater.mu.Unlock()
+
+	if !heartbeatCalled {
+		t.Error("expected Heartbeat() to be called on the heartbeater")
+	}
+
+	if heartbeatNodeID != "test-node" {
+		t.Errorf(
+			"expected heartbeat node ID to be 'test-node', got '%s'",
+			heartbeatNodeID,
+		)
 	}
 }

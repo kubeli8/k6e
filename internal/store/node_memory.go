@@ -69,6 +69,7 @@ func (s *MemoryNodeStore) UpdateHeartbeat(ctx context.Context, id string, timest
 		return ErrNotFound
 	}
 	node.LastHeartbeat = timestamp
+	node.Status = model.NodeStatusReady
 	s.nodes[id] = node
 	return nil
 }

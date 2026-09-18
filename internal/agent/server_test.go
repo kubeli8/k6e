@@ -10,8 +10,8 @@ import (
 )
 
 func TestServerRunContainer(t *testing.T) {
-	fake := &FakeRuntime{}
-	ag := New(fake)
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
 	server := NewServer(ag)
 
 	body := RunContainerRequest{
@@ -47,17 +47,17 @@ func TestServerRunContainer(t *testing.T) {
 		t.Errorf("expected container ID 'fake-container-123', got '%s'", response.ContainerID)
 	}
 
-	if !fake.createCalled {
+	if !fakeRuntime.createCalled {
 		t.Error("expected Create() to be called")
 	}
-	if !fake.startCalled {
+	if !fakeRuntime.startCalled {
 		t.Error("expected Start() to be called")
 	}
 }
 
 func TestServerRunContainerInvalidJSON(t *testing.T) {
-	fake := &FakeRuntime{}
-	ag := New(fake)
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
 	server := NewServer(ag)
 
 	req := httptest.NewRequest(
@@ -72,16 +72,16 @@ func TestServerRunContainerInvalidJSON(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected status 400, not %d", rec.Code)
 	}
-	if fake.createCalled {
+	if fakeRuntime.createCalled {
 		t.Error("expected Create() not to be called")
 	}
 }
 
 func TestServerRunContainerRuntimeError(t *testing.T) {
-	fake := &FakeRuntime{
+	fakeRuntime := &FakeRuntime{
 		startError: errors.New("start failed"),
 	}
-	ag := New(fake)
+	ag := New(fakeRuntime, nil, nil)
 	server := NewServer(ag)
 
 	body := RunContainerRequest{
@@ -108,13 +108,13 @@ func TestServerRunContainerRuntimeError(t *testing.T) {
 		t.Fatalf("expected status 500, not %d", rec.Code)
 	}
 
-	if !fake.createCalled {
+	if !fakeRuntime.createCalled {
 		t.Error("expected Create() to be called")
 	}
-	if !fake.startCalled {
+	if !fakeRuntime.startCalled {
 		t.Error("expected Start() to be called")
 	}
-	if !fake.removeCalled {
+	if !fakeRuntime.removeCalled {
 		t.Error("expected Remove() to be called after Start() failed")
 	}
 }
