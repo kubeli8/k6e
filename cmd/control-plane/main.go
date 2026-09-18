@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
 
 	"github.com/pyd-07/k6e/internal/api"
+	"github.com/pyd-07/k6e/internal/controller"
 	"github.com/pyd-07/k6e/internal/store"
 )
 
@@ -24,6 +26,15 @@ func main() {
 	defer store.Close()
 
 	server := api.NewServer(store, store)
+	livenessChecker := controller.NewLivenessChecker(store, 60)
+
+	ctx := context.Background()
+
+	go func() {
+		if err := livenessChecker.Start(ctx, 30); err != nil {
+			log.Fatalf("Liveness checker failed: %v", err)
+		}
+	}()
 
 	log.Println("kubeli8 control plane listening on :8080")
 	log.Printf("using database: %s", *dbPath)

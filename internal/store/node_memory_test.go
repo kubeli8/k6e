@@ -154,3 +154,57 @@ func TestNodeMemoryStoreUpdateHeartbeatNotFound(t *testing.T) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
+
+func TestNodeMemoryStoreUpdateHeartbeatSetsStatusReady(t *testing.T) {
+	store := NewMemoryNodeStore()
+	node := testNode("node1", "addr:node1", model.NodeStatusNotReady)
+	err := store.RegisterNode(context.Background(), node)
+	if err != nil {
+		t.Fatalf("register, got %v", err)
+	}
+
+	err = store.UpdateHeartbeat(context.Background(), "node1", time.Now())
+	if err != nil {
+		t.Fatalf("update heartbeat, got %v", err)
+	}
+
+	retrievedNode, err := store.GetNode(context.Background(), "node1")
+	if err != nil {
+		t.Fatalf("get, got %v", err)
+	}
+
+	if retrievedNode.Status != model.NodeStatusReady {
+		t.Errorf("expected status 'Ready', got '%s'", retrievedNode.Status)
+	}
+}
+
+func TestNodeMemoryStoreUpdateStatus(t *testing.T) {
+	store := NewMemoryNodeStore()
+	node := testNode("node1", "addr:node1", model.NodeStatusNotReady)
+	err := store.RegisterNode(context.Background(), node)
+	if err != nil {
+		t.Fatalf("register, got %v", err)
+	}
+
+	err = store.UpdateNodeStatus(context.Background(), "node1", model.NodeStatusReady)
+	if err != nil {
+		t.Fatalf("update status, got %v", err)
+	}
+
+	retrievedNode, err := store.GetNode(context.Background(), "node1")
+	if err != nil {
+		t.Fatalf("get, got %v", err)
+	}
+
+	if retrievedNode.Status != model.NodeStatusReady {
+		t.Errorf("expected status 'Ready', got '%s'", retrievedNode.Status)
+	}
+}
+
+func TestNodeMemoryStoreUpdateStatusNotFound(t *testing.T) {
+	store := NewMemoryNodeStore()
+	err := store.UpdateNodeStatus(context.Background(), "nonexistent", model.NodeStatusReady)
+	if err != ErrNotFound {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

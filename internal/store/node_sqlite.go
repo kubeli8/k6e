@@ -131,3 +131,31 @@ func (s *SQLiteStore) UpdateHeartbeat(ctx context.Context, id string, timestamp 
 
 	return nil
 }
+
+func (s *SQLiteStore) UpdateNodeStatus(ctx context.Context, id string, status model.NodeStatus) error {
+	query := `
+	UPDATE nodes
+	SET status = ?
+	WHERE id = ?
+	`
+	result, err := s.db.ExecContext(
+		ctx,
+		query,
+		status,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("update node status: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}

@@ -73,3 +73,16 @@ func (s *MemoryNodeStore) UpdateHeartbeat(ctx context.Context, id string, timest
 	s.nodes[id] = node
 	return nil
 }
+
+func (s *MemoryNodeStore) UpdateNodeStatus(ctx context.Context, id string, status model.NodeStatus) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	node, exists := s.nodes[id]
+	if !exists {
+		return ErrNotFound
+	}
+	node.Status = status
+	s.nodes[id] = node
+	return nil
+}

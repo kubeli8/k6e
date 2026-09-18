@@ -240,3 +240,55 @@ func TestSQLiteStore_UpdateHeartbeatNotFound(t *testing.T) {
 		t.Errorf("expected ErrNotFound, got: %v", err)
 	}
 }
+
+func TestSQLiteStore_UpdateNodeStatus(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	if err := store.RegisterNode(ctx, node); err != nil {
+		t.Fatalf("failed to register node: %v", err)
+	}
+
+	err = store.UpdateNodeStatus(ctx, node.ID, model.NodeStatusReady)
+	if err != nil {
+		t.Fatalf("failed to update node status: %v", err)
+	}
+
+	retrievedNode, err := store.GetNode(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("failed to get node: %v", err)
+	}
+
+	if retrievedNode.Status != model.NodeStatusReady {
+		t.Errorf("expected node status to be Ready, got %v", retrievedNode.Status)
+	}
+}
+
+func TestSQLiteStore_UpdateNodeStatusNotFound(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	err = store.UpdateNodeStatus(context.Background(), "non-existent-node", model.NodeStatusReady)
+	if err == nil {
+		t.Errorf("expected error when updating status for non-existent node, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
