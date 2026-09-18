@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 )
@@ -162,6 +163,78 @@ func TestSQLiteStore_RemoveNode(t *testing.T) {
 	_, err = store.GetNode(ctx, node.ID)
 	if err == nil {
 		t.Errorf("expected error when getting removed node, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
+
+func TestSQLiteStore_RemoveNodeNotFound(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	err = store.RemoveNode(context.Background(), "non-existent-node")
+	if err == nil {
+		t.Errorf("expected error when removing non-existent node, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got: %v", err)
+	}
+}
+
+func TestSQLiteStore_UpdateHeartbeat(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	if err := store.RegisterNode(ctx, node); err != nil {
+		t.Fatalf("failed to register node: %v", err)
+	}
+
+	err = store.UpdateHeartbeat(ctx, node.ID, time.Now())
+	if err != nil {
+		t.Fatalf("failed to update heartbeat: %v", err)
+	}
+
+	retrievedNode, err := store.GetNode(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("failed to get node: %v", err)
+	}
+
+	if retrievedNode.Status != model.NodeStatusReady {
+		t.Errorf("expected node status to be Ready, got %v", retrievedNode.Status)
+	}
+}
+
+func TestSQLiteStore_UpdateHeartbeatNotFound(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	err = store.UpdateHeartbeat(context.Background(), "non-existent-node", time.Now())
+	if err == nil {
+		t.Errorf("expected error when updating heartbeat for non-existent node, got nil")
 	}
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got: %v", err)

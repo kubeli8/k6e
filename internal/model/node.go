@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 type NodeStatus string
 
 const (
@@ -8,9 +10,10 @@ const (
 )
 
 type Node struct {
-	ID      string     `json:"id"`
-	Address string     `json:"address"`
-	Status  NodeStatus `json:"status"`
+	ID            string     `json:"id"`
+	Address       string     `json:"address"`
+	Status        NodeStatus `json:"status"`
+	LastHeartbeat time.Time  `json:"last_heartbeat"`
 }
 
 func IsValidNodeStatus(status NodeStatus) bool {

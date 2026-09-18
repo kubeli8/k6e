@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 )
@@ -56,5 +57,18 @@ func (s *MemoryNodeStore) RemoveNode(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	delete(s.nodes, id)
+	return nil
+}
+
+func (s *MemoryNodeStore) UpdateHeartbeat(ctx context.Context, id string, timestamp time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	node, exists := s.nodes[id]
+	if !exists {
+		return ErrNotFound
+	}
+	node.LastHeartbeat = timestamp
+	s.nodes[id] = node
 	return nil
 }

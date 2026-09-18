@@ -12,8 +12,14 @@ func TestAssignmentSQLiteStoreCreate(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -34,8 +40,13 @@ func TestAssignmentSQLiteStoreCreateWithoutID(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	assignment.ID = ""
 
@@ -52,8 +63,13 @@ func TestAssignmentSQLiteStoreCreateDuplicate(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -74,8 +90,13 @@ func TestAssignmentSQLiteStoreGet(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -96,8 +117,13 @@ func TestAssignmentSQLiteStoreGetNotFound(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	_, err = store.GetAssignment(ctx, "nonexistent")
 	if err == nil {
 		t.Fatalf("expected error for non-existent assignment")
@@ -111,8 +137,13 @@ func TestSQLiteStoreList(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 
 	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
 	assignment2 := testAssignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
@@ -145,8 +176,13 @@ func TestSQLiteStoreUpdateStatus(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -172,8 +208,13 @@ func TestSQLiteStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -199,8 +240,13 @@ func TestSQLiteStoreDeleteNotFound(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {
-		t.Fatalf("failed to create SQLite store: %v", err)
+		t.Fatalf("failed to create SQLiteStore: %v", err)
 	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
 	err = store.DeleteAssignment(ctx, "nonexistent")
 	if err == nil {
 		t.Fatalf("expected error for non-existent assignment")

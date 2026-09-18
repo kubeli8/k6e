@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 )
@@ -11,4 +12,5 @@ type NodeStore interface {
 	GetNode(ctx context.Context, id string) (model.Node, error)
 	ListNodes(ctx context.Context) ([]model.Node, error)
 	RemoveNode(ctx context.Context, id string) error
+	UpdateHeartbeat(ctx context.Context, id string, timestamp time.Time) error
 }

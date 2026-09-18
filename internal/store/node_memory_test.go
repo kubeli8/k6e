@@ -3,15 +3,17 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 )
 
 func testNode(id, address string, status model.NodeStatus) model.Node {
 	return model.Node{
-		ID:      id,
-		Address: address,
-		Status:  status,
+		ID:            id,
+		Address:       address,
+		Status:        status,
+		LastHeartbeat: time.Now(),
 	}
 }
 
@@ -116,6 +118,38 @@ func TestNodeMemoryStoreRemove(t *testing.T) {
 func TestNodeMemoryStoreRemoveNotFound(t *testing.T) {
 	store := NewMemoryNodeStore()
 	err := store.RemoveNode(context.Background(), "nonexistent")
+	if err != ErrNotFound {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestNodeMemoryStoreUpdateHeartbeat(t *testing.T) {
+	store := NewMemoryNodeStore()
+	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	err := store.RegisterNode(context.Background(), node)
+	if err != nil {
+		t.Fatalf("register, got %v", err)
+	}
+
+	newTime := time.Now().Add(10 * time.Minute)
+	err = store.UpdateHeartbeat(context.Background(), "node1", newTime)
+	if err != nil {
+		t.Fatalf("update heartbeat, got %v", err)
+	}
+
+	retrievedNode, err := store.GetNode(context.Background(), "node1")
+	if err != nil {
+		t.Fatalf("get, got %v", err)
+	}
+
+	if !retrievedNode.LastHeartbeat.Equal(newTime) {
+		t.Errorf("expected last heartbeat %v, got %v", newTime, retrievedNode.LastHeartbeat)
+	}
+}
+
+func TestNodeMemoryStoreUpdateHeartbeatNotFound(t *testing.T) {
+	store := NewMemoryNodeStore()
+	err := store.UpdateHeartbeat(context.Background(), "nonexistent", time.Now())
 	if err != ErrNotFound {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}

@@ -179,7 +179,8 @@ func (s *SQLiteStore) initializeSchema() error {
 	CREATE TABLE IF NOT EXISTS nodes(
 		id TEXT PRIMARY KEY,
 		address TEXT NOT NULL,
-		status TEXT NOT NULL
+		status TEXT NOT NULL,
+		last_heartbeat TIMESTAMP NOT NULL
 	);
 	`
 
