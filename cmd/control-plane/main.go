@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/api"
 	"github.com/pyd-07/k6e/internal/controller"
@@ -26,12 +27,12 @@ func main() {
 	defer store.Close()
 
 	server := api.NewServer(store, store)
-	livenessChecker := controller.NewLivenessChecker(store, 60)
+	livenessChecker := controller.NewLivenessChecker(store, 30*time.Second)
 
 	ctx := context.Background()
 
 	go func() {
-		if err := livenessChecker.Start(ctx, 30); err != nil {
+		if err := livenessChecker.Start(ctx, 10*time.Second); err != nil {
 			log.Fatalf("Liveness checker failed: %v", err)
 		}
 	}()

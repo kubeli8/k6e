@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/agent"
 	"github.com/pyd-07/k6e/internal/model"
@@ -51,6 +52,12 @@ func main() {
 	}
 
 	fmt.Println("Node Registered:", *nodeId)
+
+	go func() {
+		if err := ag.StartHeartbeat(ctx, *nodeId, 10*time.Second); err != nil {
+			log.Printf("Heartbeat stopped: %v", err)
+		}
+	}()
 
 	agentServer := agent.NewServer(ag)
 	log.Printf("Agent API listening on %s\n", *address)
