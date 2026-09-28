@@ -67,7 +67,7 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workload, err := s.workloadStore.Get(r.Context(), namespace, name)
+	workload, err := s.workloadStore.Get(r.Context(), model.WorkloadRef{Namespace: namespace, Name: name})
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
@@ -92,7 +92,7 @@ func (s *Server) deleteWorkload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.workloadStore.Delete(r.Context(), namespace, name); err != nil {
+	if err := s.workloadStore.Delete(r.Context(), model.WorkloadRef{Namespace: namespace, Name: name}); err != nil {
 		switch {
 		case errors.Is(err, store.ErrNotFound):
 			writeError(w, http.StatusNotFound, "Workload not found")

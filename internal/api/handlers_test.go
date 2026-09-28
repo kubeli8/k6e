@@ -87,7 +87,7 @@ func TestCreateWorkload(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", http.StatusCreated, rec.Code)
 	}
 
-	created, err := server.workloadStore.Get(ctx, "default", "test-workload")
+	created, err := server.workloadStore.Get(ctx, model.WorkloadRef{Namespace: "default", Name: "test-workload"})
 	if err != nil {
 		t.Fatalf("Failed to get created workload: %v", err)
 	}
@@ -353,7 +353,7 @@ func TestWorkloadDelete(t *testing.T) {
 		t.Fatalf("Expected status code %d, got %d", http.StatusNoContent, rec.Code)
 	}
 
-	_, err := server.workloadStore.Get(context.Background(), "default", "test-workload")
+	_, err := server.workloadStore.Get(context.Background(), model.WorkloadRef{Namespace: "default", Name: "test-workload"})
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("Expected workload to be deleted, but it still exists")
 	}

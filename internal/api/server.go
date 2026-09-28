@@ -9,6 +9,7 @@ import (
 type Server struct {
 	workloadStore store.WorkloadStore
 	nodeStore     store.NodeStore
+	assignmentStore store.AssignmentStore
 }
 
 func NewServer(workloadStore store.WorkloadStore, nodeStore store.NodeStore) *Server {

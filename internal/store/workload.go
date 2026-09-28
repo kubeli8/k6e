@@ -8,7 +8,7 @@ import (
 
 type WorkloadStore interface {
 	Create(ctx context.Context, workload model.Workload) error
-	Get(ctx context.Context, namespace, name string) (model.Workload, error)
+	Get(ctx context.Context, ref model.WorkloadRef) (model.Workload, error)
 	List(ctx context.Context, namespace string) ([]model.Workload, error)
-	Delete(ctx context.Context, namespace, name string) error
+	Delete(ctx context.Context, ref model.WorkloadRef) error
 }

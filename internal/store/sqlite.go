@@ -81,7 +81,7 @@ func (s *SQLiteStore) Create(ctx context.Context, workload model.Workload) error
 	return nil
 }
 
-func (s *SQLiteStore) Get(ctx context.Context, namespace, name string) (model.Workload, error) {
+func (s *SQLiteStore) Get(ctx context.Context, ref model.WorkloadRef) (model.Workload, error) {
 	query := `
 		SELECT namespace, name, api_version, kind, spec_json
 		FROM workloads
@@ -91,7 +91,7 @@ func (s *SQLiteStore) Get(ctx context.Context, namespace, name string) (model.Wo
 		workload model.Workload
 		specJSON string
 	)
-	err := s.db.QueryRowContext(ctx, query, namespace, name).Scan(
+	err := s.db.QueryRowContext(ctx, query, ref.Namespace, ref.Name).Scan(
 		&workload.Metadata.Namespace,
 		&workload.Metadata.Name,
 		&workload.APIVersion,
@@ -152,12 +152,12 @@ func (s *SQLiteStore) List(ctx context.Context, namespace string) ([]model.Workl
 	return workloads, nil
 }
 
-func (s *SQLiteStore) Delete(ctx context.Context, namespace, name string) error {
+func (s *SQLiteStore) Delete(ctx context.Context, ref model.WorkloadRef) error {
 	query := `
 	DELETE FROM workloads
 	WHERE namespace = ? AND name = ?
 	`
-	result, err := s.db.ExecContext(ctx, query, namespace, name)
+	result, err := s.db.ExecContext(ctx, query, ref.Namespace, ref.Name)
 	if err != nil {
 		return fmt.Errorf("delete workload: %w", err)
 	}

@@ -40,7 +40,7 @@ func TestMemoryStoreCreateAndGet(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	got, err := store.Get(ctx, want.Metadata.Namespace, want.Metadata.Name)
+	got, err := store.Get(ctx, model.WorkloadRef{Namespace: want.Metadata.Namespace, Name: want.Metadata.Name})
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -58,12 +58,12 @@ func TestMemoryStoreDuplicateCreate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("test-workload", "default")
-	if err := store.Create(ctx, workload); err != nil {
+	want := testWorkload("test-workload", "default")
+	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	err := store.Create(ctx, workload)
+	err := store.Create(ctx, want)
 
 	if !errors.Is(err, ErrAlreadyExists) {
 		t.Fatalf("Second Create() expected error = %v, got = %v", ErrAlreadyExists, err)
@@ -74,7 +74,7 @@ func TestMemoryStoreGetNotFound(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	_, err := store.Get(ctx, "default", "non-existent-workload")
+	_, err := store.Get(ctx, model.WorkloadRef{Namespace: "default", Name: "nonexistent-workload"})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Get() expected error = %v, got = %v", ErrNotFound, err)
 	}
@@ -84,17 +84,17 @@ func TestMemoryStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("test-workload", "default")
+	want := testWorkload("test-workload", "default")
 
-	if err := store.Create(ctx, workload); err != nil {
+	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	if err := store.Delete(ctx, workload.Metadata.Namespace, workload.Metadata.Name); err != nil {
+	if err := store.Delete(ctx, model.WorkloadRef{Namespace: want.Metadata.Namespace, Name: want.Metadata.Name}); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	_, err := store.Get(ctx, workload.Metadata.Namespace, workload.Metadata.Name)
+	_, err := store.Get(ctx, model.WorkloadRef{Namespace: want.Metadata.Namespace, Name: want.Metadata.Name})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Get() after Delete expected error = %v, got = %v", ErrNotFound, err)
 	}
@@ -104,7 +104,7 @@ func TestMemoryStoreDeleteNotFound(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	err := store.Delete(ctx, "default", "non-existent-workload")
+	err := store.Delete(ctx, model.WorkloadRef{Namespace: "default", Name: "non-existent-workload"})
 
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Delete() expected error = %v, got = %v", ErrNotFound, err)

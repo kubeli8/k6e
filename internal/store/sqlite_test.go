@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/pyd-07/k6e/internal/model"
 )
 
 func TestSQLiteStore(t *testing.T) {
@@ -122,7 +124,7 @@ func TestSQLiteStore_Get(t *testing.T) {
 		t.Fatalf("failed to create workload: %v", err)
 	}
 
-	retrievedWorkload, err := store.Get(ctx, workload.Metadata.Namespace, workload.Metadata.Name)
+	retrievedWorkload, err := store.Get(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name})
 	if err != nil {
 		t.Fatalf("failed to get workload: %v", err)
 	}
@@ -150,7 +152,7 @@ func TestSQLiteStore_GetNotFound(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	_, err = store.Get(ctx, "nonexistent-namespace", "nonexistent-name")
+	_, err = store.Get(ctx, model.WorkloadRef{Namespace: "default", Name: "nonexistent-workload"})
 	if err == nil {
 		t.Fatalf("expected error when getting non-existent workload, got nil")
 	}
@@ -212,11 +214,11 @@ func TestSQLiteStore_Delete(t *testing.T) {
 		t.Fatalf("failed to create workload: %v", err)
 	}
 
-	if err := store.Delete(ctx, "default", "test-workload"); err != nil {
+	if err := store.Delete(ctx, model.WorkloadRef{Namespace: "default", Name: "test-workload"}); err != nil {
 		t.Fatalf("failed to delete the workload: %v", err)
 	}
 
-	_, err = store.Get(ctx, "default", "test-workload")
+	_, err = store.Get(ctx, model.WorkloadRef{Namespace: "default", Name: "test-workload"})
 	if err == nil {
 		t.Fatalf("expected error when getting deleted workload, got nil")
 	}
@@ -237,7 +239,7 @@ func TestSQLiteStore_DeleteNotFound(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	err = store.Delete(ctx, "default", "nonexistent-workload")
+	err = store.Delete(ctx, model.WorkloadRef{Namespace: "default", Name: "nonexistent-workload"})
 	if err == nil {
 		t.Fatalf("expected error when deleting non-existent workload, got nil")
 	}
