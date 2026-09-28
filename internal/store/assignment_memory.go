@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 type MemoryAssignmentStore struct {
@@ -65,6 +66,21 @@ func (s *MemoryAssignmentStore) UpdateStatusAssignment(ctx context.Context, id s
 	if !exists {
 		return ErrNotFound
 	}
+	assignment.Status = status
+	s.assignments[id] = assignment
+	return nil
+}
+
+func (s *MemoryAssignmentStore) UpdateAssignmentExecution(ctx context.Context, id string, containerID runtime.ContainerID, status model.AssignmentStatus) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, exists := s.assignments[id]
+	if !exists {
+		return ErrNotFound
+	}
+	assignment := s.assignments[id]
+	assignment.ContainerID = string(containerID)
 	assignment.Status = status
 	s.assignments[id] = assignment
 	return nil

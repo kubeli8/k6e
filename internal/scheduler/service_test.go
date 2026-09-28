@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
 	"github.com/pyd-07/k6e/internal/store"
 )
 
@@ -26,6 +27,10 @@ func (f *failingAssignmentStore) ListAssignments(ctx context.Context, namespace 
 }
 
 func (f *failingAssignmentStore) UpdateStatusAssignment(ctx context.Context, id string, status model.AssignmentStatus) error {
+	return f.err
+}
+
+func (f *failingAssignmentStore) UpdateAssignmentExecution(ctx context.Context, id string, containerID runtime.ContainerID, status model.AssignmentStatus) error {
 	return f.err
 }
 
@@ -139,7 +144,7 @@ func TestServiceScheduleWorkload_WorkloadNotFound(t *testing.T) {
 		t.Fatalf("ScheduleWorkload() error = nil, want = error")
 	}
 
-	if !errors.Is(err, store.ErrNotFound) {
+	if err != store.ErrNotFound {
 		t.Fatalf("ScheduleWorkload() error = %v, want = %v", err, store.ErrNotFound)
 	}
 }

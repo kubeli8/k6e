@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 func (s *SQLiteStore) CreateAssignment(ctx context.Context, assignment model.Assignment) error {
@@ -109,6 +110,26 @@ func (s *SQLiteStore) UpdateStatusAssignment(ctx context.Context, id string, sta
 		return ErrNotFound
 	}
 	return err
+}
+
+func (s *SQLiteStore) UpdateAssignmentExecution(ctx context.Context, id string, containerID runtime.ContainerID, status model.AssignmentStatus) error {
+	query := `
+	UPDATE assignments
+	SET container_id = ?, status = ?
+	WHERE id = ?
+	`
+	result, err := s.db.ExecContext(ctx, query, string(containerID), status, id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *SQLiteStore) DeleteAssignment(ctx context.Context, id string) error {

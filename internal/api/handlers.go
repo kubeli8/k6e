@@ -229,3 +229,26 @@ func (s *Server) scheduleWorkload(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(assignment)
 }
+
+func (s *Server) executeAssignment(w http.ResponseWriter, r *http.Request) {
+	assignmentID := r.PathValue("id")
+	if strings.TrimSpace(assignmentID) == "" {
+		writeError(w, http.StatusBadRequest, "Assignment ID is required")
+		return
+	}
+
+	assignment, err := s.executor.ExecuteAssignment(r.Context(), assignmentID)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Assignment not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to execute assignment")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(assignment)
+}

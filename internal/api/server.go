@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/pyd-07/k6e/internal/executor"
 	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
 )
@@ -12,6 +13,7 @@ type Server struct {
 	nodeStore       store.NodeStore
 	assignmentStore store.AssignmentStore
 	scheduler       *scheduler.Service
+	executor        *executor.Service
 }
 
 func NewServer(
@@ -19,12 +21,14 @@ func NewServer(
 	nodeStore store.NodeStore,
 	assignmentStore store.AssignmentStore,
 	scheduler *scheduler.Service,
+	executor *executor.Service,
 ) *Server {
 	return &Server{
 		workloadStore:   workloadStore,
 		nodeStore:       nodeStore,
 		assignmentStore: assignmentStore,
 		scheduler:       scheduler,
+		executor:        executor,
 	}
 }
 
@@ -46,6 +50,9 @@ func (s *Server) Handler() http.Handler {
 
 	// Scheduler endpoints
 	mux.HandleFunc("POST /api/v1/workloads/{namespace}/{name}/scheduler", s.scheduleWorkload)
+
+	// Executor endpoints
+	mux.HandleFunc("POST /api/v1/assignments/{id}/execute", s.executeAssignment)
 
 	return mux
 }

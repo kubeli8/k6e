@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pyd-07/k6e/internal/executor"
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
@@ -49,7 +50,9 @@ func testServer() *Server {
 	nodeStore := store.NewMemoryNodeStore()
 	assignmentStore := store.NewMemoryAssignmentStore()
 	scheduler := scheduler.NewService(workloadStore, nodeStore, assignmentStore, &scheduler.SimpleScheduler{})
-	return NewServer(workloadStore, nodeStore, assignmentStore, scheduler)
+	executor := executor.NewService(assignmentStore, workloadStore, nodeStore, &executor.HTTPContainerExecutor{})
+
+	return NewServer(workloadStore, nodeStore, assignmentStore, scheduler, executor)
 }
 
 func TestCreateWorkload(t *testing.T) {

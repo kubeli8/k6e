@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 func TestAssignmentSQLiteStoreCreate(t *testing.T) {
@@ -201,6 +202,82 @@ func TestSQLiteStoreUpdateStatus(t *testing.T) {
 	}
 	if retrieved.Status != model.AssignmentStatusPending {
 		t.Errorf("expected status %s, got %s", model.AssignmentStatusPending, retrieved.Status)
+	}
+}
+
+func TestSQLiteStoreUpdateStatusNotFound(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+	err = store.UpdateStatusAssignment(ctx, "nonexistent", model.AssignmentStatusPending)
+	if err == nil {
+		t.Fatalf("expected error for non-existent assignment")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteStoreUpdateExecution(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+	assignment := testAssignment("test", "default", "node1", "", model.AssignmentStatusPending)
+
+	err = store.CreateAssignment(ctx, assignment)
+	if err != nil {
+		t.Fatalf("create, got %v", err)
+	}
+
+	containerID := "container123"
+	err = store.UpdateAssignmentExecution(ctx, assignment.ID, runtime.ContainerID(containerID), model.AssignmentStatusRunning)
+	if err != nil {
+		t.Fatalf("update execution, got %v", err)
+	}
+
+	retrieved, err := store.GetAssignment(ctx, assignment.ID)
+	if err != nil {
+		t.Fatalf("get, got %v", err)
+	}
+	if retrieved.ContainerID != containerID {
+		t.Errorf("expected container ID %s, got %s", containerID, retrieved.ContainerID)
+	}
+	if retrieved.Status != model.AssignmentStatusRunning {
+		t.Errorf("expected status %s, got %s", model.AssignmentStatusRunning, retrieved.Status)
+	}
+}
+
+func TestSQLiteStoreUpdateExecutionNotFound(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+	err = store.UpdateAssignmentExecution(ctx, "nonexistent", runtime.ContainerID("container123"), model.AssignmentStatusRunning)
+	if err == nil {
+		t.Fatalf("expected error for non-existent assignment")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 

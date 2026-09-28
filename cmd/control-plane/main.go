@@ -9,6 +9,7 @@ import (
 
 	"github.com/pyd-07/k6e/internal/api"
 	"github.com/pyd-07/k6e/internal/controller"
+	"github.com/pyd-07/k6e/internal/executor"
 	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
 )
@@ -28,8 +29,9 @@ func main() {
 	defer store.Close()
 
 	schedulerService := scheduler.NewService(store, store, store, &scheduler.SimpleScheduler{})
+	executorService := executor.NewService(store, store, store, executor.NewHTTPContainerExecutor(nil))
 
-	server := api.NewServer(store, store, store, schedulerService)
+	server := api.NewServer(store, store, store, schedulerService, executorService)
 	livenessChecker := controller.NewLivenessChecker(store, 30*time.Second)
 
 	ctx := context.Background()

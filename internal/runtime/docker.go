@@ -27,11 +27,12 @@ func NewDockerRuntime() (*DockerRuntime, error) {
 }
 
 func (r *DockerRuntime) Create(ctx context.Context, spec ContainerSpec) (ContainerID, error) {
+	cmd := append(append([]string{}, spec.Command...), spec.Args...)
 	resp, err := r.client.ContainerCreate(
 		ctx,
 		&container.Config{
 			Image: spec.Image,
-			Cmd:   spec.Command,
+			Cmd:   cmd,
 		},
 		nil,
 		nil,

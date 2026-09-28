@@ -21,6 +21,7 @@ type RunContainerRequest struct {
 	Name    string   `json:"name"`
 	Image   string   `json:"image"`
 	Command []string `json:"command,omitempty"`
+	Args    []string `json:"args,omitempty"`
 }
 type RunContainerResponse struct {
 	ContainerID string `json:"containerId"`
@@ -45,6 +46,7 @@ func (s *Server) runContainer(w http.ResponseWriter, r *http.Request) {
 		Name:    req.Name,
 		Image:   req.Image,
 		Command: req.Command,
+		Args:    req.Args,
 	}
 
 	id, err := s.agent.Run(r.Context(), spec)

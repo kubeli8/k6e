@@ -8,6 +8,7 @@ type ContainerSpec struct {
 	Name    string
 	Image   string
 	Command []string
+	Args    []string
 }
 
 type ContainerInfo struct {

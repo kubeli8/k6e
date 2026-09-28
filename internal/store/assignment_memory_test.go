@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
 )
 
 func testAssignment(name, namespace, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
@@ -159,6 +160,45 @@ func TestAssignmentMemoryStoreUpdateStatusNotFound(t *testing.T) {
 		t.Fatalf("expected error for non-existent assignment")
 	}
 
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestAssignmentMemoryStoreUpdateExecution(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryAssignmentStore()
+	assignment := testAssignment("test", "default", "node1", "", model.AssignmentStatusPending)
+	err := store.CreateAssignment(ctx, assignment)
+	if err != nil {
+		t.Fatalf("create, got %v", err)
+	}
+
+	containerID := "container123"
+	err = store.UpdateAssignmentExecution(ctx, assignment.ID, runtime.ContainerID(containerID), model.AssignmentStatusRunning)
+	if err != nil {
+		t.Fatalf("update execution, got %v", err)
+	}
+
+	retrieved, err := store.GetAssignment(ctx, assignment.ID)
+	if err != nil {
+		t.Fatalf("get, got %v", err)
+	}
+	if retrieved.ContainerID != containerID {
+		t.Errorf("expected container ID %s, got %s", containerID, retrieved.ContainerID)
+	}
+	if retrieved.Status != model.AssignmentStatusRunning {
+		t.Errorf("expected status %s, got %s", model.AssignmentStatusRunning, retrieved.Status)
+	}
+}
+
+func TestAssignmentMemoryStoreUpdateExecutionNotFound(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryAssignmentStore()
+	err := store.UpdateAssignmentExecution(ctx, "nonexistent", runtime.ContainerID("container123"), model.AssignmentStatusRunning)
+	if err == nil {
+		t.Fatalf("expected error for non-existent assignment")
+	}
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
