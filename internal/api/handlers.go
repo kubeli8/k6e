@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
 )
 
@@ -199,4 +200,32 @@ func (s *Server) updateNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) scheduleWorkload(w http.ResponseWriter, r *http.Request) {
+	namespace := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	if strings.TrimSpace(namespace) == "" || strings.TrimSpace(name) == "" {
+		writeError(w, http.StatusBadRequest, "Namespace and name are required")
+		return
+	}
+
+	ref := model.WorkloadRef{Namespace: namespace, Name: name}
+	assignment, err := s.scheduler.ScheduleWorkload(r.Context(), ref)
+	if err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Workload not found")
+		case errors.Is(err, scheduler.ErrNoReadyNodes):
+			writeError(w, http.StatusConflict, "No available nodes to schedule the workload")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to schedule workload")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(assignment)
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
 )
 
@@ -46,7 +47,9 @@ func testNode(id, address string, status model.NodeStatus) model.Node {
 func testServer() *Server {
 	workloadStore := store.NewMemoryStore()
 	nodeStore := store.NewMemoryNodeStore()
-	return NewServer(workloadStore, nodeStore)
+	assignmentStore := store.NewMemoryAssignmentStore()
+	scheduler := scheduler.NewService(workloadStore, nodeStore, assignmentStore, &scheduler.SimpleScheduler{})
+	return NewServer(workloadStore, nodeStore, assignmentStore, scheduler)
 }
 
 func TestCreateWorkload(t *testing.T) {
@@ -603,5 +606,91 @@ func TestNodeUpdateHeartbeatNotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestScheduleWorkload(t *testing.T) {
+	ctx := context.Background()
+	server := testServer()
+
+	workload := testWorkload("test-workload", "default")
+	if err := server.workloadStore.Create(ctx, workload); err != nil {
+		t.Fatalf("Failed to create workload: %v", err)
+	}
+
+	nodeID := "node-1"
+	nodeAddr := "localhost:8081"
+
+	if err := server.nodeStore.RegisterNode(ctx, model.Node{ID: nodeID, Address: nodeAddr, Status: model.NodeStatusReady}); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/workloads/default/test-workload/scheduler",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("Expected status code %d, got %d", http.StatusCreated, rec.Code)
+	}
+
+	var assignment model.Assignment
+	if err := json.NewDecoder(rec.Body).Decode(&assignment); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if assignment.Workload.Namespace != "default" || assignment.Workload.Name != "test-workload" {
+		t.Errorf("Expected workload ref {default test-workload}, got {%s %s}", assignment.Workload.Namespace, assignment.Workload.Name)
+	}
+
+	if assignment.NodeID != nodeID {
+		t.Errorf("Expected node ID %s, got %s", nodeID, assignment.NodeID)
+	}
+
+	if assignment.Status != model.AssignmentStatusPending {
+		t.Errorf("Expected status %s, got %s", model.AssignmentStatusPending, assignment.Status)
+	}
+}
+
+func TestScheduleWorkloadNotFound(t *testing.T) {
+	server := testServer()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/workloads/default/nonexistent-workload/scheduler",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestScheduleWorkloadNoNodes(t *testing.T) {
+	server := testServer()
+
+	workload := testWorkload("test-workload", "default")
+	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
+		t.Fatalf("Failed to create workload: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/workloads/default/test-workload/scheduler",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("Expected status code %d, got %d", http.StatusConflict, rec.Code)
 	}
 }
