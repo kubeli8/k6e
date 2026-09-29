@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
@@ -63,7 +64,9 @@ func (a *Agent) StartHeartbeat(ctx context.Context, nodeID string, interval time
 }
 
 func (a *Agent) Run(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
+	start := time.Now()
 	id, err := a.runtime.Create(ctx, spec)
+	log.Printf("Agent.Run took %s", time.Since(start))
 	if err != nil {
 		return "", err
 	}

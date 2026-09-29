@@ -3,8 +3,11 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 )
 
@@ -40,7 +43,36 @@ func (r *DockerRuntime) Create(ctx context.Context, spec ContainerSpec) (Contain
 		spec.Name,
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create container: %w", err)
+		if errdefs.IsNotFound(err) {
+			reader, err := r.client.ImagePull(ctx, spec.Image, image.PullOptions{})
+			if err != nil {
+				return "", fmt.Errorf("failed to pull image %q: %w", spec.Image, err)
+			}
+
+			_, err = io.Copy(io.Discard, reader)
+			reader.Close()
+
+			if err != nil {
+				return "", fmt.Errorf("failed while pulling image %q: %w", spec.Image, err)
+			}
+			resp, err = r.client.ContainerCreate(
+				ctx,
+				&container.Config{
+					Image: spec.Image,
+					Cmd:   cmd,
+				},
+				nil,
+				nil,
+				nil,
+				spec.Name,
+			)
+
+			if err != nil {
+				return "", fmt.Errorf("failed to create container after pulling image %q: %w", spec.Image, err)
+			}
+		} else {
+			return "", fmt.Errorf("failed to create container: %w", err)
+		}
 	}
 
 	return ContainerID(resp.ID), nil

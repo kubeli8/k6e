@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
@@ -18,7 +19,9 @@ type HTTPContainerExecutor struct {
 
 func NewHTTPContainerExecutor(client *http.Client) *HTTPContainerExecutor {
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{
+			Timeout: 5 * time.Minute,
+		}
 	}
 
 	return &HTTPContainerExecutor{
