@@ -31,6 +31,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/containers", s.runContainer)
+	mux.HandleFunc("GET /api/v1/containers/{id}", s.inspectContainer)
 
 	return mux
 }
@@ -61,4 +62,19 @@ func (s *Server) runContainer(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(RunContainerResponse{
 		ContainerID: string(id),
 	})
+}
+
+func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {
+	id := runtime.ContainerID(r.PathValue("id"))
+
+	info, err := s.agent.Inspect(r.Context(), id)
+	if err != nil {
+		http.Error(w, "Failed to inspect container: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	_ = json.NewEncoder(w).Encode(info)
 }

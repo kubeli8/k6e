@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/pyd-07/k6e/internal/agent"
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 	"github.com/pyd-07/k6e/internal/store"
@@ -44,6 +45,36 @@ func (o *fakeObserver) Inspect(ctx context.Context, assignment model.Assignment)
 		return runtime.ContainerInfo{}, o.err
 	}
 	return o.info, nil
+}
+
+type fakeContainerRuntime struct {
+	info      runtime.ContainerInfo
+	inspectID runtime.ContainerID
+	err       error
+}
+
+func (r *fakeContainerRuntime) Create(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
+	return "", nil
+}
+
+func (r *fakeContainerRuntime) Start(ctx context.Context, id runtime.ContainerID) error {
+	return nil
+}
+
+func (r *fakeContainerRuntime) Stop(ctx context.Context, id runtime.ContainerID) error {
+	return nil
+}
+
+func (r *fakeContainerRuntime) Remove(ctx context.Context, id runtime.ContainerID) error {
+	return nil
+}
+
+func (r *fakeContainerRuntime) Inspect(ctx context.Context, id runtime.ContainerID) (runtime.ContainerInfo, error) {
+	r.inspectID = id
+	if r.err != nil {
+		return runtime.ContainerInfo{}, r.err
+	}
+	return r.info, nil
 }
 
 func TestControllerReconcile(t *testing.T) {
@@ -707,5 +738,64 @@ func TestControllerStartStopWithContext(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("controller did not exit after context cancellation")
+	}
+}
+
+func TestAgentRuntimeObserverInspect(t *testing.T) {
+	ctx := context.Background()
+
+	fakeRuntime := &fakeContainerRuntime{
+		info: runtime.ContainerInfo{
+			ID:      "container-id",
+			Running: true,
+			State:   "running",
+		},
+	}
+
+	agent := agent.New(fakeRuntime, nil, nil)
+
+	observer := NewAgentRuntimeObserver(agent)
+
+	assignment := model.Assignment{
+		ContainerID: "container-id",
+	}
+
+	info, err := observer.Inspect(ctx, assignment)
+	if err != nil {
+		t.Fatalf("failed to inspect container: %v", err)
+	}
+
+	if info.ID != "container-id" {
+		t.Errorf("expected container ID 'container-id', got '%s'", info.ID)
+	}
+	if !info.Running {
+		t.Errorf("expected container to be running, got '%t'", info.Running)
+	}
+
+	if fakeRuntime.inspectID != "container-id" {
+		t.Fatalf("Inspect() called with ID %q, want %q", fakeRuntime.inspectID, "container-id")
+	}
+}
+
+func TestAgentRuntimeObserverInspectError(t *testing.T) {
+	ctx := context.Background()
+
+	expectedErr := errors.New("container not found")
+
+	fakeRuntime := &fakeContainerRuntime{
+		err: expectedErr,
+	}
+
+	agent := agent.New(fakeRuntime, nil, nil)
+
+	observer := NewAgentRuntimeObserver(agent)
+
+	assignment := model.Assignment{
+		ContainerID: "non-existent-container",
+	}
+
+	_, err := observer.Inspect(ctx, assignment)
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected error %v, got %v", expectedErr, err)
 	}
 }

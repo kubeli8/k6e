@@ -18,6 +18,11 @@ type FakeRuntime struct {
 	removeCalled bool
 
 	startError error
+
+	inspectCalled bool
+	inspectID     runtime.ContainerID
+	inspectInfo   runtime.ContainerInfo
+	inspectError  error
 }
 
 type FakeRegistrar struct {
@@ -48,7 +53,9 @@ func (f *FakeRuntime) Start(ctx context.Context, id runtime.ContainerID) error {
 }
 
 func (f *FakeRuntime) Inspect(ctx context.Context, id runtime.ContainerID) (runtime.ContainerInfo, error) {
-	return runtime.ContainerInfo{}, nil
+	f.inspectCalled = true
+	f.inspectID = id
+	return f.inspectInfo, f.inspectError
 }
 
 func (f *FakeRuntime) Stop(ctx context.Context, id runtime.ContainerID) error {
