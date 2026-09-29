@@ -59,7 +59,7 @@ func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (m
 		Args:    container.Args,
 	}
 
-	containerID, err := s.executor.Execute(ctx, node, spec)
+	containerID, err := s.executor.RunContainer(ctx, node, spec)
 	if err != nil {
 		_ = s.assignmentStore.UpdateAssignmentExecution(ctx, assignmentID, "", model.AssignmentStatusFailed)
 		assignment.Status = model.AssignmentStatusFailed

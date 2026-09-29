@@ -10,7 +10,7 @@ type ReplicaState struct {
 	Failed   int
 }
 
-func CalaculateReplicaState(workload model.Workload, assignments []model.Assignment) ReplicaState {
+func CalculateReplicaState(workload model.Workload, assignments []model.Assignment) ReplicaState {
 	state := ReplicaState{
 		Desired:  int(workload.Spec.Replicas),
 		Assigned: len(assignments),

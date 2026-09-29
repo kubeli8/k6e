@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
@@ -15,13 +16,19 @@ type ReconcileDecision struct {
 }
 
 type WorkloadScheduler interface {
-	Schedule(ctx context.Context, ref model.WorkloadRef) (model.Assignment, error)
+	ScheduleWorkload(ctx context.Context, ref model.WorkloadRef) (model.Assignment, error)
+}
+
+// AssignmentExecutor advances a scheduled assignment through its worker-side execution.
+type AssignmentExecutor interface {
+	ExecuteAssignment(ctx context.Context, assignmentID string) (model.Assignment, error)
 }
 
 type Controller struct {
 	workloadStore   store.WorkloadStore
 	assignmentStore store.AssignmentStore
 	scheduler       WorkloadScheduler
+	executor        AssignmentExecutor
 	observer        RuntimeObserver
 
 	namespace string
@@ -32,6 +39,7 @@ func NewController(
 	workloadStore store.WorkloadStore,
 	assignmentStore store.AssignmentStore,
 	scheduler WorkloadScheduler,
+	executor AssignmentExecutor,
 	observer RuntimeObserver,
 	namespace string,
 	interval time.Duration,
@@ -40,6 +48,7 @@ func NewController(
 		workloadStore:   workloadStore,
 		assignmentStore: assignmentStore,
 		scheduler:       scheduler,
+		executor:        executor,
 		observer:        observer,
 		namespace:       namespace,
 		interval:        interval,
@@ -58,7 +67,9 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("controller reconciliation interval must be positive")
 	}
 
-	_ = c.ReconcileAll(ctx)
+	if err := c.ReconcileAll(ctx); err != nil {
+		log.Printf("initial reconciliation failed: %v", err)
+	}
 
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
@@ -68,7 +79,9 @@ func (c *Controller) Start(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			_ = c.ReconcileAll(ctx)
+			if err := c.ReconcileAll(ctx); err != nil {
+				log.Printf("reconciliation failed: %v", err)
+			}
 		}
 	}
 }
@@ -138,12 +151,18 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 		assignment.Status = newStatus
 	}
 
-	state := CalaculateReplicaState(workload, assignments)
+	state := CalculateReplicaState(workload, assignments)
 	decision := Decide(state)
 
 	for i := 0; i < decision.Create; i++ {
-		_, err := c.scheduler.Schedule(ctx, ref)
+		assignment, err := c.scheduler.ScheduleWorkload(ctx, ref)
 		if err != nil {
+			return err
+		}
+		if c.executor == nil {
+			return fmt.Errorf("assignment executor not configured")
+		}
+		if _, err := c.executor.ExecuteAssignment(ctx, assignment.ID); err != nil {
 			return err
 		}
 	}

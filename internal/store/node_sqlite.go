@@ -11,6 +11,9 @@ import (
 )
 
 func (s *SQLiteStore) RegisterNode(ctx context.Context, node model.Node) error {
+	if node.LastHeartbeat.IsZero() {
+		node.LastHeartbeat = time.Now()
+	}
 	query := `
 	INSERT INTO nodes (id, address, status, last_heartbeat)
 	VALUES (?, ?, ?, ?)

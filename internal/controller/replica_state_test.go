@@ -30,7 +30,7 @@ func TestCalculateReplicaState(t *testing.T) {
 		},
 	}
 
-	state := CalaculateReplicaState(workload, assignments)
+	state := CalculateReplicaState(workload, assignments)
 
 	if state.Desired != 3 {
 		t.Fatalf("expected desired=3, got %d", state.Desired)
