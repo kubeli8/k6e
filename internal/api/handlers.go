@@ -120,9 +120,10 @@ func (s *Server) registerNode(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.nodeStore.RegisterNode(r.Context(), node); err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to register node")
+		return
 	}
 
-	w.Header()
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(node)
 }

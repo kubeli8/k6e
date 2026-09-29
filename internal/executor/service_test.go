@@ -169,7 +169,7 @@ type fakeExecutor struct {
 	spec   runtime.ContainerSpec
 }
 
-func (f *fakeExecutor) Execute(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
+func (f *fakeExecutor) RunContainer(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
 	f.called = true
 	f.node = node
 	f.spec = spec

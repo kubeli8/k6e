@@ -20,6 +20,9 @@ func NewMemoryNodeStore() *MemoryNodeStore {
 }
 
 func (s *MemoryNodeStore) RegisterNode(ctx context.Context, node model.Node) error {
+	if node.LastHeartbeat.IsZero() {
+		node.LastHeartbeat = time.Now()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

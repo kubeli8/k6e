@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pyd-07/k6e/internal/agentclient"
 	"github.com/pyd-07/k6e/internal/api"
 	"github.com/pyd-07/k6e/internal/controller"
 	"github.com/pyd-07/k6e/internal/executor"
@@ -29,7 +30,9 @@ func main() {
 	defer store.Close()
 
 	schedulerService := scheduler.NewService(store, store, store, &scheduler.SimpleScheduler{})
-	executorService := executor.NewService(store, store, store, executor.NewHTTPContainerExecutor(nil))
+	workerClient := agentclient.New(nil)
+	executorService := executor.NewService(store, store, store, workerClient)
+	controllerService := controller.NewController(store, store, schedulerService, executorService, controller.NewHTTPRuntimeObserver(store, workerClient), "default", 10*time.Second)
 
 	server := api.NewServer(store, store, store, schedulerService, executorService)
 	livenessChecker := controller.NewLivenessChecker(store, 30*time.Second)
@@ -39,6 +42,11 @@ func main() {
 	go func() {
 		if err := livenessChecker.Start(ctx, 10*time.Second); err != nil {
 			log.Fatalf("Liveness checker failed: %v", err)
+		}
+	}()
+	go func() {
+		if err := controllerService.Start(ctx); err != nil && err != context.Canceled {
+			log.Printf("controller stopped: %v", err)
 		}
 	}()
 

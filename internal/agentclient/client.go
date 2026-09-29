@@ -1,0 +1,103 @@
+// Package agentclient provides the control-plane client for worker agents.
+package agentclient
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/runtime"
+)
+
+// Client communicates with a node agent over its HTTP API.
+type Client struct{ client *http.Client }
+
+func New(client *http.Client) *Client {
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Minute}
+	}
+	return &Client{client: client}
+}
+
+type runContainerRequest struct {
+	Name    string   `json:"name"`
+	Image   string   `json:"image"`
+	Command []string `json:"command,omitempty"`
+	Args    []string `json:"args,omitempty"`
+}
+
+type runContainerResponse struct {
+	ContainerID string `json:"containerId"`
+}
+
+func (c *Client) RunContainer(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
+	body, err := json.Marshal(runContainerRequest{Name: spec.Name, Image: spec.Image, Command: spec.Command, Args: spec.Args})
+	if err != nil {
+		return "", fmt.Errorf("marshal container request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, nodeURL(node, "/api/v1/containers"), bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	var response runContainerResponse
+	if err := c.doJSON(req, http.StatusCreated, &response); err != nil {
+		return "", err
+	}
+
+	if response.ContainerID == "" {
+		return "", fmt.Errorf("empty container ID in response")
+	}
+	return runtime.ContainerID(response.ContainerID), nil
+}
+
+func (c *Client) InspectContainer(ctx context.Context, node model.Node, id runtime.ContainerID) (runtime.ContainerInfo, error) {
+	if id == "" {
+		return runtime.ContainerInfo{}, fmt.Errorf("container ID is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nodeURL(node, "/api/v1/containers/"+string(id)), nil)
+	if err != nil {
+		return runtime.ContainerInfo{}, fmt.Errorf("create request: %w", err)
+	}
+
+	var info runtime.ContainerInfo
+	if err := c.doJSON(req, http.StatusOK, &info); err != nil {
+		return runtime.ContainerInfo{}, err
+	}
+
+	return info, nil
+}
+
+func (c *Client) doJSON(req *http.Request, expectedStatus int, target any) error {
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != expectedStatus {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return fmt.Errorf("unexpected status code: %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
+}
+
+func nodeURL(node model.Node, path string) string {
+	address := strings.TrimRight(node.Address, "/")
+	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
+		address = "http://" + address
+	}
+	return address + path
+}

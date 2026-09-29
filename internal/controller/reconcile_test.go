@@ -3,34 +3,52 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/pyd-07/k6e/internal/agent"
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 	"github.com/pyd-07/k6e/internal/store"
 )
 
 type fakeScheduler struct {
-	calls       int
-	assignments []model.Assignment
-	err         error
+	calls int
+	err   error
+	store *store.MemoryAssignmentStore
+	refs  []model.WorkloadRef
 }
 
-func (s *fakeScheduler) Schedule(ctx context.Context, ref model.WorkloadRef) (model.Assignment, error) {
+func (s *fakeScheduler) ScheduleWorkload(_ context.Context, ref model.WorkloadRef) (model.Assignment, error) {
 	s.calls++
+	s.refs = append(s.refs, ref)
 	if s.err != nil {
 		return model.Assignment{}, s.err
 	}
-	assignment := model.Assignment{
-		ID:       uuid.NewString(),
-		Workload: ref,
-		Status:   model.AssignmentStatusPending,
+	assignment := model.Assignment{ID: fmt.Sprintf("assignment-%d", s.calls), Workload: ref, Status: model.AssignmentStatusPending}
+	if s.store != nil {
+		if err := s.store.CreateAssignment(context.Background(), assignment); err != nil {
+			return model.Assignment{}, err
+		}
 	}
-	s.assignments = append(s.assignments, assignment)
 	return assignment, nil
+}
+
+type fakeAssignmentExecutor struct {
+	calls  int
+	err    error
+	called chan<- string
+}
+
+func (e *fakeAssignmentExecutor) ExecuteAssignment(_ context.Context, id string) (model.Assignment, error) {
+	e.calls++
+	if e.called != nil {
+		e.called <- id
+	}
+	if e.err != nil {
+		return model.Assignment{}, e.err
+	}
+	return model.Assignment{ID: id, Status: model.AssignmentStatusRunning}, nil
 }
 
 type fakeObserver struct {
@@ -39,7 +57,7 @@ type fakeObserver struct {
 	err   error
 }
 
-func (o *fakeObserver) Inspect(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
+func (o *fakeObserver) Inspect(_ context.Context, _ model.Assignment) (runtime.ContainerInfo, error) {
 	o.calls++
 	if o.err != nil {
 		return runtime.ContainerInfo{}, o.err
@@ -47,755 +65,238 @@ func (o *fakeObserver) Inspect(ctx context.Context, assignment model.Assignment)
 	return o.info, nil
 }
 
-type fakeContainerRuntime struct {
-	info      runtime.ContainerInfo
-	inspectID runtime.ContainerID
-	err       error
-}
-
-func (r *fakeContainerRuntime) Create(ctx context.Context, spec runtime.ContainerSpec) (runtime.ContainerID, error) {
-	return "", nil
-}
-
-func (r *fakeContainerRuntime) Start(ctx context.Context, id runtime.ContainerID) error {
-	return nil
-}
-
-func (r *fakeContainerRuntime) Stop(ctx context.Context, id runtime.ContainerID) error {
-	return nil
-}
-
-func (r *fakeContainerRuntime) Remove(ctx context.Context, id runtime.ContainerID) error {
-	return nil
-}
-
-func (r *fakeContainerRuntime) Inspect(ctx context.Context, id runtime.ContainerID) (runtime.ContainerInfo, error) {
-	r.inspectID = id
-	if r.err != nil {
-		return runtime.ContainerInfo{}, r.err
+func newControllerFixture(t *testing.T, replicas int32, assignments []model.Assignment, scheduler *fakeScheduler, executor *fakeAssignmentExecutor, observer *fakeObserver, interval time.Duration) (*Controller, model.WorkloadRef, *store.MemoryAssignmentStore) {
+	t.Helper()
+	ctx := context.Background()
+	workloads := store.NewMemoryStore()
+	assignmentStore := store.NewMemoryAssignmentStore()
+	ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+	if err := workloads.Create(ctx, model.Workload{Metadata: model.ObjectMeta{Name: ref.Name, Namespace: ref.Namespace}, Spec: model.WorkloadSpec{Replicas: replicas}}); err != nil {
+		t.Fatal(err)
 	}
-	return r.info, nil
+	for _, assignment := range assignments {
+		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return NewController(workloads, assignmentStore, scheduler, executor, observer, ref.Namespace, interval), ref, assignmentStore
+}
+
+func TestControllerReconcileSchedulesAndExecutesMissingReplica(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	c, ref, _ := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if scheduler.calls != 1 || executor.calls != 1 {
+		t.Fatalf("schedule=%d execute=%d, want 1 each", scheduler.calls, executor.calls)
+	}
+}
+
+func TestControllerReconcileExecutorErrorIsPropagated(t *testing.T) {
+	want := errors.New("agent unavailable")
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{err: want}
+	c, ref, _ := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); !errors.Is(err, want) {
+		t.Fatalf("got %v, want %v", err, want)
+	}
+}
+
+func TestControllerReconcileSchedulerError(t *testing.T) {
+	want := errors.New("no ready nodes")
+	scheduler, executor := &fakeScheduler{err: want}, &fakeAssignmentExecutor{}
+	c, ref, _ := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); !errors.Is(err, want) {
+		t.Fatalf("got %v, want %v", err, want)
+	}
+	if executor.calls != 0 {
+		t.Fatalf("executor called %d times after scheduler error", executor.calls)
+	}
 }
 
 func TestControllerReconcile(t *testing.T) {
 	tests := []struct {
-		name            string
-		desired         int32
-		running         int
-		pending         int
-		failed          int
-		expectedCreates int
+		name                              string
+		desired, running, pending, failed int
+		expectedSchedules                 int
 	}{
-		{
-			name:            "already converged",
-			desired:         3,
-			running:         3,
-			pending:         0,
-			failed:          0,
-			expectedCreates: 0,
-		},
-		{
-			name:            "one replica missing",
-			desired:         3,
-			running:         2,
-			pending:         0,
-			failed:          0,
-			expectedCreates: 1,
-		},
-		{
-			name:            "pending replica counts as in flight",
-			desired:         3,
-			running:         2,
-			pending:         1,
-			failed:          0,
-			expectedCreates: 0,
-		},
-		{
-			name:            "all replicas missing",
-			desired:         3,
-			running:         0,
-			pending:         0,
-			failed:          0,
-			expectedCreates: 3,
-		},
-		{
-			name:            "failed replicas do not count",
-			desired:         3,
-			running:         2,
-			pending:         0,
-			failed:          1,
-			expectedCreates: 1,
-		},
+		{name: "already converged", desired: 3, running: 3, expectedSchedules: 0},
+		{name: "one missing", desired: 3, running: 2, expectedSchedules: 1},
+		{name: "pending counts as in flight", desired: 3, running: 2, pending: 1, expectedSchedules: 0},
+		{name: "all missing", desired: 3, expectedSchedules: 3},
+		{name: "failed does not count", desired: 3, running: 2, failed: 1, expectedSchedules: 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-
-			workloadStore := store.NewMemoryStore()
-			assignmentStore := store.NewMemoryAssignmentStore()
-			scheduler := &fakeScheduler{}
-			observer := &fakeObserver{}
-
-			replicas := tt.desired
-
-			workload := model.Workload{
-				APIVersion: "k6e/v1",
-				Kind:       "Workload",
-				Metadata: model.ObjectMeta{
-					Name:      "nginx",
-					Namespace: "default",
-				},
-				Spec: model.WorkloadSpec{
-					Replicas: replicas,
-				},
-			}
-
-			err := workloadStore.Create(ctx, workload)
-			if err != nil {
-				t.Fatalf("failed to create workload: %v", err)
-			}
-
-			for i := 0; i < tt.running; i++ {
-				err := assignmentStore.CreateAssignment(ctx, model.Assignment{
-					ID: uuid.NewString(),
-					Workload: model.WorkloadRef{
-						Name:      "nginx",
-						Namespace: "default",
-					},
-					Status: model.AssignmentStatusRunning,
-				})
-				if err != nil {
-					t.Fatalf("failed to create running assignment: %v", err)
+			scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+			ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+			assignments := make([]model.Assignment, 0, tt.running+tt.pending+tt.failed)
+			for _, item := range []struct {
+				status model.AssignmentStatus
+				count  int
+			}{{model.AssignmentStatusRunning, tt.running}, {model.AssignmentStatusPending, tt.pending}, {model.AssignmentStatusFailed, tt.failed}} {
+				for i := 0; i < item.count; i++ {
+					assignment := model.Assignment{ID: fmt.Sprintf("%s-%d", item.status, i), Workload: ref, Status: item.status}
+					if item.status == model.AssignmentStatusRunning {
+						assignment.ContainerID = fmt.Sprintf("container-%d", i)
+					}
+					assignments = append(assignments, assignment)
 				}
 			}
-
-			for i := 0; i < tt.pending; i++ {
-				err := assignmentStore.CreateAssignment(ctx, model.Assignment{
-					ID: uuid.NewString(),
-					Workload: model.WorkloadRef{
-						Name:      "nginx",
-						Namespace: "default",
-					},
-					Status: model.AssignmentStatusPending,
-				})
-				if err != nil {
-					t.Fatalf("failed to create pending assignment: %v", err)
-				}
+			c, _, _ := newControllerFixture(t, int32(tt.desired), assignments, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
+			if err := c.Reconcile(context.Background(), ref); err != nil {
+				t.Fatal(err)
 			}
-
-			for i := 0; i < tt.failed; i++ {
-				err := assignmentStore.CreateAssignment(ctx, model.Assignment{
-					ID: uuid.NewString(),
-					Workload: model.WorkloadRef{
-						Name:      "nginx",
-						Namespace: "default",
-					},
-					Status: model.AssignmentStatusFailed,
-				})
-				if err != nil {
-					t.Fatalf("failed to create failed assignment: %v", err)
-				}
-			}
-
-			controller := NewController(
-				workloadStore,
-				assignmentStore,
-				scheduler,
-				observer,
-				"default",
-				10*time.Millisecond,
-			)
-
-			ref := model.WorkloadRef{
-				Name:      "nginx",
-				Namespace: "default",
-			}
-
-			err = controller.Reconcile(ctx, ref)
-			if err != nil {
-				t.Fatalf("Reconcile() failed: %v", err)
-			}
-
-			if scheduler.calls != tt.expectedCreates {
-				t.Fatalf(
-					"expected scheduler to be called %d times, got %d",
-					tt.expectedCreates,
-					scheduler.calls,
-				)
+			if scheduler.calls != tt.expectedSchedules || executor.calls != tt.expectedSchedules {
+				t.Fatalf("schedule=%d execute=%d, want %d each", scheduler.calls, executor.calls, tt.expectedSchedules)
 			}
 		})
 	}
 }
 
-func TestControllerReconcileSchedulerError(t *testing.T) {
-	ctx := context.Background()
-
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-
-	replicas := int32(1)
-
-	workload := model.Workload{
-		Metadata: model.ObjectMeta{
-			Name:      "nginx",
-			Namespace: "default",
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: replicas,
-		},
-	}
-	err := workloadStore.Create(ctx, workload)
-	if err != nil {
-		t.Fatalf("failed to create workload: %v", err)
-	}
-
-	schedulerErr := errors.New("no ready nodes")
-
-	scheduler := &fakeScheduler{
-		err: schedulerErr,
-	}
-	observer := &fakeObserver{}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		10*time.Millisecond,
-	)
-
-	ref := model.WorkloadRef{
-		Name:      "nginx",
-		Namespace: "default",
-	}
-
-	err = controller.Reconcile(ctx, ref)
-
-	if !errors.Is(err, schedulerErr) {
-		t.Fatalf("expected error %v, got %v", schedulerErr, err)
+func TestControllerReconcileDoesNotDuplicatePendingOrRunning(t *testing.T) {
+	for _, status := range []model.AssignmentStatus{model.AssignmentStatusPending, model.AssignmentStatusRunning} {
+		t.Run(string(status), func(t *testing.T) {
+			scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+			assignment := model.Assignment{ID: "a", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: status}
+			if status == model.AssignmentStatusRunning {
+				assignment.ContainerID = "container"
+			}
+			c, ref, _ := newControllerFixture(t, 1, []model.Assignment{assignment}, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
+			if err := c.Reconcile(context.Background(), ref); err != nil {
+				t.Fatal(err)
+			}
+			if scheduler.calls != 0 || executor.calls != 0 {
+				t.Fatalf("unexpected work: schedule=%d execute=%d", scheduler.calls, executor.calls)
+			}
+		})
 	}
 }
 
-func TestControllerObserveAssignment(t *testing.T) {
-	ctx := context.Background()
-
-	expected := runtime.ContainerInfo{
-		ID:      "container-id",
-		Running: true,
-		State:   "running",
+func TestControllerReconcileDeadContainerFailsAndReplaces(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	assignment := model.Assignment{ID: "old", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusRunning, ContainerID: "dead"}
+	c, ref, assignments := newControllerFixture(t, 1, []model.Assignment{assignment}, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: false}}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
 	}
-
-	observer := &fakeObserver{
-		info: expected,
-	}
-	controller := NewController(nil, nil, nil, observer, "default", 10*time.Millisecond)
-
-	assignment := model.Assignment{
-		ID:          "assignment-id",
-		NodeID:      "node-1",
-		ContainerID: "container-id",
-		Status:      model.AssignmentStatusRunning,
-	}
-
-	actual, err := controller.ObserveAssignment(ctx, assignment)
+	updated, err := assignments.GetAssignment(context.Background(), "old")
 	if err != nil {
-		t.Fatalf("ObserveAssignment() failed: %v", err)
+		t.Fatal(err)
 	}
-
-	if actual.ID != expected.ID {
-		t.Fatalf("expected %v, got %v", expected, actual)
-	}
-
-	if !actual.Running {
-		t.Fatalf("expected container to be running")
-	}
-
-	if observer.calls != 1 {
-		t.Fatalf("expected observer to be called once, got %d", observer.calls)
-	}
-}
-
-func TestControllerObserverAssignmentError(t *testing.T) {
-	ctx := context.Background()
-
-	expectedErr := errors.New("container inspection failed")
-	observer := &fakeObserver{
-		err: expectedErr,
-	}
-	controller := NewController(nil, nil, nil, observer, "default", 10*time.Millisecond)
-
-	assignment := model.Assignment{
-		ID:          "assignment-id",
-		NodeID:      "node-1",
-		ContainerID: "container-id",
-		Status:      model.AssignmentStatusRunning,
-	}
-
-	_, err := controller.ObserveAssignment(ctx, assignment)
-	if !errors.Is(err, expectedErr) {
-		t.Fatalf("expected error %v, got %v", expectedErr, err)
-	}
-
-	if observer.calls != 1 {
-		t.Fatalf("expected observer to be called once, got %d", observer.calls)
-	}
-}
-
-func TestControllerReconcileDeadContainer(t *testing.T) {
-	ctx := context.Background()
-
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-
-	replicas := int32(1)
-
-	workload := model.Workload{
-		Metadata: model.ObjectMeta{
-			Name:      "nginx",
-			Namespace: "default",
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: replicas,
-		},
-	}
-
-	if err := workloadStore.Create(ctx, workload); err != nil {
-		t.Fatalf("failed to create workload: %v", err)
-	}
-
-	assignment := model.Assignment{
-		ID: "assignment-1",
-		Workload: model.WorkloadRef{
-			Name:      "nginx",
-			Namespace: "default",
-		},
-		NodeID:      "node-1",
-		Status:      model.AssignmentStatusRunning,
-		ContainerID: "container-1",
-	}
-
-	if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
-		t.Fatalf("failed to create assignment: %v", err)
-	}
-
-	observer := &fakeObserver{
-		info: runtime.ContainerInfo{
-			ID:      "container-1",
-			State:   "exited",
-			Running: false,
-		},
-	}
-
-	scheduler := &fakeScheduler{}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		10*time.Millisecond,
-	)
-
-	ref := model.WorkloadRef{
-		Name:      "nginx",
-		Namespace: "default",
-	}
-
-	if err := controller.Reconcile(ctx, ref); err != nil {
-		t.Fatalf("reconcile failed: %v", err)
-	}
-
-	updated, err := assignmentStore.GetAssignment(ctx, assignment.ID)
-	if err != nil {
-		t.Fatalf("failed to get assignment: %v", err)
-	}
-
 	if updated.Status != model.AssignmentStatusFailed {
-		t.Fatalf("expected assignment to be failed, got %v", updated.Status)
+		t.Fatalf("got %s", updated.Status)
 	}
-
-	if scheduler.calls != 1 {
-		t.Fatalf("expected scheduler to be called once, got %d", scheduler.calls)
+	if scheduler.calls != 1 || executor.calls != 1 {
+		t.Fatalf("schedule=%d execute=%d", scheduler.calls, executor.calls)
 	}
+}
 
-	if observer.calls != 1 {
-		t.Fatalf("expected runtime observer to be called once, got %d", observer.calls)
+func TestControllerReconcileFailedReplicaIsReplaced(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	failed := model.Assignment{ID: "failed", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusFailed}
+	c, ref, _ := newControllerFixture(t, 1, []model.Assignment{failed}, scheduler, executor, &fakeObserver{}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if scheduler.calls != 1 || executor.calls != 1 {
+		t.Fatalf("schedule=%d execute=%d", scheduler.calls, executor.calls)
+	}
+}
+
+func TestControllerReconcileIsIdempotent(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	c, ref, assignments := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, time.Second)
+	scheduler.store = assignments
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if scheduler.calls != 1 || executor.calls != 1 {
+		t.Fatalf("schedule=%d execute=%d, want one execution", scheduler.calls, executor.calls)
 	}
 }
 
 func TestControllerReconcileAll(t *testing.T) {
 	ctx := context.Background()
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-	scheduler := &fakeScheduler{}
-	observer := &fakeObserver{
-		info: runtime.ContainerInfo{
-			ID:      "container-id",
-			Running: true,
-			State:   "running",
-		},
-	}
-
-	replicas := int32(1)
-
-	workload := []model.Workload{
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "nginx",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "redis",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "postgres",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-	}
-
-	for _, workload := range workload {
-		if err := workloadStore.Create(ctx, workload); err != nil {
-			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
-		}
-
-		assignment := model.Assignment{
-			ID: "assignment-" + workload.Metadata.Name,
-			Workload: model.WorkloadRef{
-				Name:      workload.Metadata.Name,
-				Namespace: workload.Metadata.Namespace,
-			},
-			NodeID:      "node-1",
-			Status:      model.AssignmentStatusRunning,
-			ContainerID: "container-1",
-		}
-
-		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
-			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
+	workloads, assignments := store.NewMemoryStore(), store.NewMemoryAssignmentStore()
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	for _, workload := range []model.Workload{
+		{Metadata: model.ObjectMeta{Name: "nginx", Namespace: "default"}, Spec: model.WorkloadSpec{Replicas: 1}},
+		{Metadata: model.ObjectMeta{Name: "redis", Namespace: "default"}, Spec: model.WorkloadSpec{Replicas: 2}},
+		{Metadata: model.ObjectMeta{Name: "other", Namespace: "other"}, Spec: model.WorkloadSpec{Replicas: 3}},
+	} {
+		if err := workloads.Create(ctx, workload); err != nil {
+			t.Fatal(err)
 		}
 	}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		10*time.Millisecond,
-	)
-
-	if err := controller.ReconcileAll(ctx); err != nil {
-		t.Fatalf("ReconcileAll() failed: %v", err)
+	c := NewController(workloads, assignments, scheduler, executor, &fakeObserver{}, "default", time.Second)
+	if err := c.ReconcileAll(ctx); err != nil {
+		t.Fatal(err)
 	}
-
-	if observer.calls != len(workload) {
-		t.Fatalf("expected observer to be called %d times, got %d", len(workload), observer.calls)
+	if scheduler.calls != 3 || executor.calls != 3 {
+		t.Fatalf("schedule=%d execute=%d, want 3 each", scheduler.calls, executor.calls)
 	}
-
-	if scheduler.calls != 0 {
-		t.Fatalf("expected scheduler to be called 0 times, got %d", scheduler.calls)
+	scheduled := map[string]int{}
+	for _, ref := range scheduler.refs {
+		scheduled[ref.Namespace+"/"+ref.Name]++
+	}
+	if scheduled["default/nginx"] != 1 || scheduled["default/redis"] != 2 || scheduled["other/other"] != 0 {
+		t.Fatalf("unexpected per-workload scheduling: %#v", scheduled)
 	}
 }
 
 func TestControllerStartImmediateReconcile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-	scheduler := &fakeScheduler{}
-	observer := &fakeObserver{
-		info: runtime.ContainerInfo{
-			ID:      "container-id",
-			Running: true,
-			State:   "running",
-		},
-	}
-
-	replicas := int32(1)
-
-	workload := []model.Workload{
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "nginx",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "redis",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "postgres",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-	}
-
-	for _, workload := range workload {
-		if err := workloadStore.Create(ctx, workload); err != nil {
-			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
-		}
-
-		assignment := model.Assignment{
-			ID: "assignment-" + workload.Metadata.Name,
-			Workload: model.WorkloadRef{
-				Name:      workload.Metadata.Name,
-				Namespace: workload.Metadata.Namespace,
-			},
-			NodeID:      "node-1",
-			Status:      model.AssignmentStatusRunning,
-			ContainerID: "container-1",
-		}
-
-		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
-			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
-		}
-	}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		1*time.Second,
-	)
-
+	called := make(chan string, 1)
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{called: called}
+	c, _, _ := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, time.Hour)
 	done := make(chan error, 1)
-	go func() {
-		done <- controller.Start(ctx)
-	}()
-
-	deadline := time.After(500 * time.Millisecond)
-	for observer.calls == 0 {
-		select {
-		case <-deadline:
-			t.Fatal("controller did not reconcile immediately")
-		default:
-			time.Sleep(time.Millisecond)
-		}
+	go func() { done <- c.Start(ctx) }()
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("controller did not reconcile immediately")
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
 	}
 }
 
 func TestControllerStartPeriodicReconcile(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-	scheduler := &fakeScheduler{}
-	observer := &fakeObserver{
-		info: runtime.ContainerInfo{
-			ID:      "container-id",
-			Running: true,
-			State:   "running",
-		},
-	}
-
-	replicas := int32(1)
-
-	workload := []model.Workload{
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "nginx",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "redis",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-		{
-			Metadata: model.ObjectMeta{
-				Name:      "postgres",
-				Namespace: "default",
-			},
-			Spec: model.WorkloadSpec{
-				Replicas: replicas,
-			},
-		},
-	}
-
-	for _, workload := range workload {
-		if err := workloadStore.Create(ctx, workload); err != nil {
-			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
-		}
-
-		assignment := model.Assignment{
-			ID: "assignment-" + workload.Metadata.Name,
-			Workload: model.WorkloadRef{
-				Name:      workload.Metadata.Name,
-				Namespace: workload.Metadata.Namespace,
-			},
-			NodeID:      "node-1",
-			Status:      model.AssignmentStatusRunning,
-			ContainerID: "container-1",
-		}
-
-		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
-			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
-		}
-	}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		10*time.Millisecond,
-	)
-
+	called := make(chan string, 2)
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{called: called}
+	c, _, _ := newControllerFixture(t, 1, nil, scheduler, executor, &fakeObserver{}, 5*time.Millisecond)
 	done := make(chan error, 1)
-	go func() {
-		done <- controller.Start(ctx)
-	}()
-
-	deadline := time.After(100 * time.Millisecond)
-
-	for observer.calls < 3 {
+	go func() { done <- c.Start(ctx) }()
+	for i := 0; i < 2; i++ {
 		select {
-		case <-deadline:
-			t.Fatalf("expected controller to reconcile at least 3 times, but it did %d", observer.calls)
-		default:
-			time.Sleep(time.Millisecond)
+		case <-called:
+		case <-time.After(time.Second):
+			t.Fatalf("controller completed only %d reconciliation cycles", i)
 		}
 	}
-}
-
-func TestControllerStartStopWithContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	workloadStore := store.NewMemoryStore()
-	assignmentStore := store.NewMemoryAssignmentStore()
-	scheduler := &fakeScheduler{}
-	observer := &fakeObserver{
-		info: runtime.ContainerInfo{
-			ID:      "container-id",
-			Running: true,
-			State:   "running",
-		},
-	}
-
-	controller := NewController(
-		workloadStore,
-		assignmentStore,
-		scheduler,
-		observer,
-		"default",
-		10*time.Millisecond,
-	)
-
-	done := make(chan error, 1)
-	go func() {
-		done <- controller.Start(ctx)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
 	cancel()
-
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("controller exited with error: %v", err)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("controller did not exit after context cancellation")
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
 	}
 }
 
-func TestAgentRuntimeObserverInspect(t *testing.T) {
-	ctx := context.Background()
-
-	fakeRuntime := &fakeContainerRuntime{
-		info: runtime.ContainerInfo{
-			ID:      "container-id",
-			Running: true,
-			State:   "running",
-		},
-	}
-
-	agent := agent.New(fakeRuntime, nil, nil)
-
-	observer := NewAgentRuntimeObserver(agent)
-
-	assignment := model.Assignment{
-		ContainerID: "container-id",
-	}
-
-	info, err := observer.Inspect(ctx, assignment)
-	if err != nil {
-		t.Fatalf("failed to inspect container: %v", err)
-	}
-
-	if info.ID != "container-id" {
-		t.Errorf("expected container ID 'container-id', got '%s'", info.ID)
-	}
-	if !info.Running {
-		t.Errorf("expected container to be running, got '%t'", info.Running)
-	}
-
-	if fakeRuntime.inspectID != "container-id" {
-		t.Fatalf("Inspect() called with ID %q, want %q", fakeRuntime.inspectID, "container-id")
-	}
-}
-
-func TestAgentRuntimeObserverInspectError(t *testing.T) {
-	ctx := context.Background()
-
-	expectedErr := errors.New("container not found")
-
-	fakeRuntime := &fakeContainerRuntime{
-		err: expectedErr,
-	}
-
-	agent := agent.New(fakeRuntime, nil, nil)
-
-	observer := NewAgentRuntimeObserver(agent)
-
-	assignment := model.Assignment{
-		ContainerID: "non-existent-container",
-	}
-
-	_, err := observer.Inspect(ctx, assignment)
-	if !errors.Is(err, expectedErr) {
-		t.Fatalf("expected error %v, got %v", expectedErr, err)
+func TestControllerStartReturnsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	c, _, _ := newControllerFixture(t, 0, nil, scheduler, executor, &fakeObserver{}, time.Second)
+	done := make(chan error, 1)
+	go func() { done <- c.Start(ctx) }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v", err)
 	}
 }

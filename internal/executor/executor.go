@@ -8,5 +8,5 @@ import (
 )
 
 type ContainerExecutor interface {
-	Execute(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error)
+	RunContainer(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error)
 }
