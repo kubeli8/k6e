@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pyd-07/k6e/internal/model"
@@ -171,6 +172,8 @@ func TestControllerReconcile(t *testing.T) {
 				assignmentStore,
 				scheduler,
 				observer,
+				"default",
+				10*time.Millisecond,
 			)
 
 			ref := model.WorkloadRef{
@@ -228,6 +231,8 @@ func TestControllerReconcileSchedulerError(t *testing.T) {
 		assignmentStore,
 		scheduler,
 		observer,
+		"default",
+		10*time.Millisecond,
 	)
 
 	ref := model.WorkloadRef{
@@ -254,7 +259,7 @@ func TestControllerObserveAssignment(t *testing.T) {
 	observer := &fakeObserver{
 		info: expected,
 	}
-	controller := NewController(nil, nil, nil, observer)
+	controller := NewController(nil, nil, nil, observer, "default", 10*time.Millisecond)
 
 	assignment := model.Assignment{
 		ID:          "assignment-id",
@@ -288,7 +293,7 @@ func TestControllerObserverAssignmentError(t *testing.T) {
 	observer := &fakeObserver{
 		err: expectedErr,
 	}
-	controller := NewController(nil, nil, nil, observer)
+	controller := NewController(nil, nil, nil, observer, "default", 10*time.Millisecond)
 
 	assignment := model.Assignment{
 		ID:          "assignment-id",
@@ -359,6 +364,8 @@ func TestControllerReconcileDeadContainer(t *testing.T) {
 		assignmentStore,
 		scheduler,
 		observer,
+		"default",
+		10*time.Millisecond,
 	)
 
 	ref := model.WorkloadRef{
@@ -385,5 +392,320 @@ func TestControllerReconcileDeadContainer(t *testing.T) {
 
 	if observer.calls != 1 {
 		t.Fatalf("expected runtime observer to be called once, got %d", observer.calls)
+	}
+}
+
+func TestControllerReconcileAll(t *testing.T) {
+	ctx := context.Background()
+	workloadStore := store.NewMemoryStore()
+	assignmentStore := store.NewMemoryAssignmentStore()
+	scheduler := &fakeScheduler{}
+	observer := &fakeObserver{
+		info: runtime.ContainerInfo{
+			ID:      "container-id",
+			Running: true,
+			State:   "running",
+		},
+	}
+
+	replicas := int32(1)
+
+	workload := []model.Workload{
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "redis",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "postgres",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+	}
+
+	for _, workload := range workload {
+		if err := workloadStore.Create(ctx, workload); err != nil {
+			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
+		}
+
+		assignment := model.Assignment{
+			ID: "assignment-" + workload.Metadata.Name,
+			Workload: model.WorkloadRef{
+				Name:      workload.Metadata.Name,
+				Namespace: workload.Metadata.Namespace,
+			},
+			NodeID:      "node-1",
+			Status:      model.AssignmentStatusRunning,
+			ContainerID: "container-1",
+		}
+
+		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
+			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
+		}
+	}
+
+	controller := NewController(
+		workloadStore,
+		assignmentStore,
+		scheduler,
+		observer,
+		"default",
+		10*time.Millisecond,
+	)
+
+	if err := controller.ReconcileAll(ctx); err != nil {
+		t.Fatalf("ReconcileAll() failed: %v", err)
+	}
+
+	if observer.calls != len(workload) {
+		t.Fatalf("expected observer to be called %d times, got %d", len(workload), observer.calls)
+	}
+
+	if scheduler.calls != 0 {
+		t.Fatalf("expected scheduler to be called 0 times, got %d", scheduler.calls)
+	}
+}
+
+func TestControllerStartImmediateReconcile(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	workloadStore := store.NewMemoryStore()
+	assignmentStore := store.NewMemoryAssignmentStore()
+	scheduler := &fakeScheduler{}
+	observer := &fakeObserver{
+		info: runtime.ContainerInfo{
+			ID:      "container-id",
+			Running: true,
+			State:   "running",
+		},
+	}
+
+	replicas := int32(1)
+
+	workload := []model.Workload{
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "redis",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "postgres",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+	}
+
+	for _, workload := range workload {
+		if err := workloadStore.Create(ctx, workload); err != nil {
+			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
+		}
+
+		assignment := model.Assignment{
+			ID: "assignment-" + workload.Metadata.Name,
+			Workload: model.WorkloadRef{
+				Name:      workload.Metadata.Name,
+				Namespace: workload.Metadata.Namespace,
+			},
+			NodeID:      "node-1",
+			Status:      model.AssignmentStatusRunning,
+			ContainerID: "container-1",
+		}
+
+		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
+			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
+		}
+	}
+
+	controller := NewController(
+		workloadStore,
+		assignmentStore,
+		scheduler,
+		observer,
+		"default",
+		1*time.Second,
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- controller.Start(ctx)
+	}()
+
+	deadline := time.After(500 * time.Millisecond)
+	for observer.calls == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("controller did not reconcile immediately")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestControllerStartPeriodicReconcile(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	workloadStore := store.NewMemoryStore()
+	assignmentStore := store.NewMemoryAssignmentStore()
+	scheduler := &fakeScheduler{}
+	observer := &fakeObserver{
+		info: runtime.ContainerInfo{
+			ID:      "container-id",
+			Running: true,
+			State:   "running",
+		},
+	}
+
+	replicas := int32(1)
+
+	workload := []model.Workload{
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "nginx",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "redis",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+		{
+			Metadata: model.ObjectMeta{
+				Name:      "postgres",
+				Namespace: "default",
+			},
+			Spec: model.WorkloadSpec{
+				Replicas: replicas,
+			},
+		},
+	}
+
+	for _, workload := range workload {
+		if err := workloadStore.Create(ctx, workload); err != nil {
+			t.Fatalf("failed to create workload %s/%s: %v", workload.Metadata.Namespace, workload.Metadata.Name, err)
+		}
+
+		assignment := model.Assignment{
+			ID: "assignment-" + workload.Metadata.Name,
+			Workload: model.WorkloadRef{
+				Name:      workload.Metadata.Name,
+				Namespace: workload.Metadata.Namespace,
+			},
+			NodeID:      "node-1",
+			Status:      model.AssignmentStatusRunning,
+			ContainerID: "container-1",
+		}
+
+		if err := assignmentStore.CreateAssignment(ctx, assignment); err != nil {
+			t.Fatalf("failed to create assignment %s %v", assignment.ID, err)
+		}
+	}
+
+	controller := NewController(
+		workloadStore,
+		assignmentStore,
+		scheduler,
+		observer,
+		"default",
+		10*time.Millisecond,
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- controller.Start(ctx)
+	}()
+
+	deadline := time.After(100 * time.Millisecond)
+
+	for observer.calls < 3 {
+		select {
+		case <-deadline:
+			t.Fatalf("expected controller to reconcile at least 3 times, but it did %d", observer.calls)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func TestControllerStartStopWithContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	workloadStore := store.NewMemoryStore()
+	assignmentStore := store.NewMemoryAssignmentStore()
+	scheduler := &fakeScheduler{}
+	observer := &fakeObserver{
+		info: runtime.ContainerInfo{
+			ID:      "container-id",
+			Running: true,
+			State:   "running",
+		},
+	}
+
+	controller := NewController(
+		workloadStore,
+		assignmentStore,
+		scheduler,
+		observer,
+		"default",
+		10*time.Millisecond,
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- controller.Start(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("controller exited with error: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("controller did not exit after context cancellation")
 	}
 }

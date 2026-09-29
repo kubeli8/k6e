@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
@@ -21,6 +23,9 @@ type Controller struct {
 	assignmentStore store.AssignmentStore
 	scheduler       WorkloadScheduler
 	observer        RuntimeObserver
+
+	namespace string
+	interval  time.Duration
 }
 
 func NewController(
@@ -28,12 +33,16 @@ func NewController(
 	assignmentStore store.AssignmentStore,
 	scheduler WorkloadScheduler,
 	observer RuntimeObserver,
+	namespace string,
+	interval time.Duration,
 ) *Controller {
 	return &Controller{
 		workloadStore:   workloadStore,
 		assignmentStore: assignmentStore,
 		scheduler:       scheduler,
 		observer:        observer,
+		namespace:       namespace,
+		interval:        interval,
 	}
 }
 
@@ -42,6 +51,49 @@ func Decide(state ReplicaState) ReconcileDecision {
 		Create: state.Missing(),
 	}
 	return decision
+}
+
+func (c *Controller) Start(ctx context.Context) error {
+	if c.interval <= 0 {
+		return fmt.Errorf("controller reconciliation interval must be positive")
+	}
+
+	_ = c.ReconcileAll(ctx)
+
+	ticker := time.NewTicker(c.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			_ = c.ReconcileAll(ctx)
+		}
+	}
+}
+
+func (c *Controller) ReconcileAll(ctx context.Context) error {
+	workloads, err := c.workloadStore.List(ctx, c.namespace)
+	if err != nil {
+		return err
+	}
+
+	var firstError error
+
+	for _, workload := range workloads {
+		if err := c.Reconcile(ctx, model.WorkloadRef{
+			Name:      workload.Metadata.Name,
+			Namespace: workload.Metadata.Namespace,
+		}); err != nil {
+			if firstError == nil {
+				firstError = err
+			}
+			continue
+		}
+	}
+
+	return firstError
 }
 
 func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error {
