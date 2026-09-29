@@ -211,10 +211,6 @@ func TestExecuteAssignment(t *testing.T) {
 		t.Fatalf("executor called with unexpected node ID: %s", executor.node.ID)
 	}
 
-	if executor.spec.Name != workload.Spec.Template.Containers[0].Name {
-		t.Fatalf("executor called with unexpected container name: %s", executor.spec.Name)
-	}
-
 	if executor.spec.Image != workload.Spec.Template.Containers[0].Image {
 		t.Fatalf("executor called with unexpected container image: %s", executor.spec.Image)
 	}

@@ -53,7 +53,7 @@ func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (m
 	container := workload.Spec.Template.Containers[0]
 
 	spec := runtime.ContainerSpec{
-		Name:    container.Name,
+		Name:    "k6e-" + container.Name + "-" + assignmentID[:8],
 		Image:   container.Image,
 		Command: container.Command,
 		Args:    container.Args,
