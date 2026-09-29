@@ -173,6 +173,70 @@ func TestSQLiteStoreList(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreListForWorkload(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testAssignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testAssignment("test3", "other", "node3", "container3", model.AssignmentStatusFailed)
+
+	err = store.CreateAssignment(ctx, assignment1)
+	if err != nil {
+		t.Fatalf("create assignment1, got %v", err)
+	}
+	err = store.CreateAssignment(ctx, assignment2)
+	if err != nil {
+		t.Fatalf("create assignment2, got %v", err)
+	}
+	err = store.CreateAssignment(ctx, assignment3)
+	if err != nil {
+		t.Fatalf("create assignment3, got %v", err)
+	}
+
+	assignments, err := store.ListAssignmentsForWorkload(ctx, model.WorkloadRef{Name: "test1", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("list by workload, got %v", err)
+	}
+
+	if len(assignments) != 1 {
+		t.Fatalf("expected 1 assignment for workload 'test1', got %d", len(assignments))
+	}
+	if assignments[0].ID != assignment1.ID {
+		t.Errorf("expected assignment ID %s, got %s", assignment1.ID, assignments[0].ID)
+	}
+}
+
+func TestSQLiteStoreListForWorkloadEmpty(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Fatalf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	assignments, err := store.ListAssignmentsForWorkload(ctx, model.WorkloadRef{Name: "nonexistent", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("list by workload, got %v", err)
+	}
+
+	if len(assignments) != 0 {
+		t.Fatalf("expected 0 assignments for non-existent workload, got %d", len(assignments))
+	}
+}
+
 func TestSQLiteStoreUpdateStatus(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewSQLiteStore(":memory:")

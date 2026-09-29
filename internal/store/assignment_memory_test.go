@@ -129,6 +129,34 @@ func TestAssignmentMemoryStoreList(t *testing.T) {
 	}
 }
 
+func TestAssignmentMemoryStoreListForWorkload(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryAssignmentStore()
+	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testAssignment("test1", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testAssignment("test2", "default", "node3", "container3", model.AssignmentStatusCompleted)
+	err := store.CreateAssignment(ctx, assignment1)
+	if err != nil {
+		t.Fatalf("create, got %v", err)
+	}
+	err = store.CreateAssignment(ctx, assignment2)
+	if err != nil {
+		t.Fatalf("create, got %v", err)
+	}
+	err = store.CreateAssignment(ctx, assignment3)
+	if err != nil {
+		t.Fatalf("create, got %v", err)
+	}
+
+	listed, err := store.ListAssignmentsForWorkload(ctx, model.WorkloadRef{Name: "test1", Namespace: "default"})
+	if err != nil {
+		t.Fatalf("list for workload, got %v", err)
+	}
+	if len(listed) != 2 {
+		t.Errorf("expected 2 assignments for workload 'test1', got %d", len(listed))
+	}
+}
+
 func TestAssignmentMemoryStoreUpdateStatus(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()

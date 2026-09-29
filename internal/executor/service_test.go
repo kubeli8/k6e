@@ -81,6 +81,10 @@ func (f *fakeAssignmentStore) ListAssignments(ctx context.Context, namespace str
 	return nil, nil
 }
 
+func (f *fakeAssignmentStore) ListAssignmentsForWorkload(ctx context.Context, ref model.WorkloadRef) ([]model.Assignment, error) {
+	return nil, nil
+}
+
 func (f *fakeAssignmentStore) UpdateStatusAssignment(ctx context.Context, id string, status model.AssignmentStatus) error {
 	return nil
 }

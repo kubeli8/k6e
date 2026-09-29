@@ -92,6 +92,42 @@ func (s *SQLiteStore) ListAssignments(ctx context.Context, namespace string) ([]
 	return assignments, nil
 }
 
+func (s *SQLiteStore) ListAssignmentsForWorkload(ctx context.Context, ref model.WorkloadRef) ([]model.Assignment, error) {
+	query := `
+	SELECT id, workload_name, workload_namespace, node_id, status, container_id
+	FROM assignments
+	WHERE workload_name = ? AND workload_namespace = ?
+	`
+	rows, err := s.db.QueryContext(ctx, query, ref.Name, ref.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var assignments []model.Assignment
+	for rows.Next() {
+		var assignment model.Assignment
+		err := rows.Scan(
+			&assignment.ID,
+			&assignment.Workload.Name,
+			&assignment.Workload.Namespace,
+			&assignment.NodeID,
+			&assignment.Status,
+			&assignment.ContainerID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		assignments = append(assignments, assignment)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return assignments, nil
+}
+
 func (s *SQLiteStore) UpdateStatusAssignment(ctx context.Context, id string, status model.AssignmentStatus) error {
 	query := `
 	UPDATE assignments

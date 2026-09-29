@@ -58,6 +58,19 @@ func (s *MemoryAssignmentStore) ListAssignments(ctx context.Context, namespace s
 	return assignments, nil
 }
 
+func (s *MemoryAssignmentStore) ListAssignmentsForWorkload(ctx context.Context, ref model.WorkloadRef) ([]model.Assignment, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	assignments := make([]model.Assignment, 0)
+	for _, assignment := range s.assignments {
+		if assignment.Workload.Name == ref.Name && assignment.Workload.Namespace == ref.Namespace {
+			assignments = append(assignments, assignment)
+		}
+	}
+	return assignments, nil
+}
+
 func (s *MemoryAssignmentStore) UpdateStatusAssignment(ctx context.Context, id string, status model.AssignmentStatus) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
