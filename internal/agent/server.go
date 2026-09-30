@@ -32,6 +32,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("POST /api/v1/containers", s.runContainer)
 	mux.HandleFunc("GET /api/v1/containers/{id}", s.inspectContainer)
+	mux.HandleFunc("DELETE /api/v1/containers/{id}", s.deleteContainer)
 
 	return mux
 }
@@ -62,6 +63,24 @@ func (s *Server) runContainer(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(RunContainerResponse{
 		ContainerID: string(id),
 	})
+}
+
+func (s *Server) deleteContainer(w http.ResponseWriter, r *http.Request) {
+	id := runtime.ContainerID(r.PathValue("id"))
+
+	err := s.agent.Stop(r.Context(), id)
+	if err != nil {
+		http.Error(w, "Failed to stop container: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = s.agent.Remove(r.Context(), id)
+	if err != nil {
+		http.Error(w, "Failed to remove container: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) inspectContainer(w http.ResponseWriter, r *http.Request) {

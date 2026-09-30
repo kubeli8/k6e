@@ -29,17 +29,16 @@ func CalculateReplicaState(workload model.Workload, assignments []model.Assignme
 }
 
 func (s ReplicaState) Missing() int {
-	missing := s.Desired - (s.Running + s.Pending)
-	if missing < 0 {
-		return 0
-	}
+	missing := max(s.Desired-(s.Running+s.Pending), 0)
 	return missing
 }
 
 func (s ReplicaState) Extra() int {
-	extra := (s.Running + s.Pending) - s.Desired
-	if extra < 0 {
-		return 0
-	}
+	extra := max(0, (s.Running+s.Pending)-s.Desired)
 	return extra
+}
+
+func (s ReplicaState) Delete() int {
+	delete := max(0, s.Running-s.Desired)
+	return delete
 }

@@ -35,9 +35,10 @@ func (s *fakeScheduler) ScheduleWorkload(_ context.Context, ref model.WorkloadRe
 }
 
 type fakeAssignmentExecutor struct {
-	calls  int
-	err    error
-	called chan<- string
+	calls       int
+	deleteCalls int
+	err         error
+	called      chan<- string
 }
 
 func (e *fakeAssignmentExecutor) ExecuteAssignment(_ context.Context, id string) (model.Assignment, error) {
@@ -49,6 +50,11 @@ func (e *fakeAssignmentExecutor) ExecuteAssignment(_ context.Context, id string)
 		return model.Assignment{}, e.err
 	}
 	return model.Assignment{ID: id, Status: model.AssignmentStatusRunning}, nil
+}
+
+func (e *fakeAssignmentExecutor) DeleteAssignment(_ context.Context, id string) error {
+	e.deleteCalls++
+	return e.err
 }
 
 type fakeObserver struct {
@@ -298,5 +304,99 @@ func TestControllerStartReturnsOnCancellation(t *testing.T) {
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestControllerReconcileScaleDown(t *testing.T) {
+	tests := []struct {
+		name            string
+		desired         int
+		running         int
+		pending         int
+		expectedDeletes int
+	}{
+		{name: "no scale down needed", desired: 3, running: 3, expectedDeletes: 0},
+		{name: "one extra running", desired: 2, running: 3, expectedDeletes: 1},
+		{name: "pending does not count for deletion", desired: 2, running: 2, pending: 1, expectedDeletes: 0},
+		{name: "all extra", desired: 1, running: 2, pending: 2, expectedDeletes: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+			ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+			assignments := make([]model.Assignment, 0, tt.running+tt.pending)
+			for _, item := range []struct {
+				status model.AssignmentStatus
+				count  int
+			}{
+				{model.AssignmentStatusRunning, tt.running},
+				{model.AssignmentStatusPending, tt.pending},
+			} {
+				for i := 0; i < item.count; i++ {
+					assignment := model.Assignment{
+						ID:       fmt.Sprintf("%s-%d", item.status, i),
+						Workload: ref,
+						Status:   item.status,
+					}
+					if item.status == model.AssignmentStatusRunning {
+						assignment.ContainerID = fmt.Sprintf("container-%d", i)
+					}
+					assignments = append(assignments, assignment)
+				}
+			}
+
+			c, _, _ := newControllerFixture(t, int32(tt.desired), assignments, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
+			if err := c.Reconcile(context.Background(), ref); err != nil {
+				t.Fatal(err)
+			}
+			if executor.deleteCalls != tt.expectedDeletes {
+				t.Fatalf("executor called %d times, want %d", executor.deleteCalls, tt.expectedDeletes)
+			}
+
+			if scheduler.calls != 0 {
+				t.Fatalf("scheduler called %d times, want 0", scheduler.calls)
+			}
+		})
+	}
+}
+
+func TestControllerReconcileScaleDownDeletesRunningAssignments(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
+	ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+	assignments := []model.Assignment{
+		{ID: "running-1", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-1"},
+		{ID: "pending-1", Workload: ref, Status: model.AssignmentStatusPending},
+		{ID: "running-2", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-2"},
+	}
+	c, _, _ := newControllerFixture(t, 1, assignments, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
+	if err := c.Reconcile(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if executor.deleteCalls != 1 {
+		t.Fatalf("executor called %d times, want 1", executor.deleteCalls)
+	}
+	if scheduler.calls != 0 {
+		t.Fatalf("scheduler called %d times, want 0", scheduler.calls)
+	}
+}
+
+func TestControllerReconcileScaleDownDeleteError(t *testing.T) {
+	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{err: errors.New("delete failed")}
+	ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+	assignments := []model.Assignment{
+		{ID: "running-1", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-1"},
+		{ID: "running-2", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-2"},
+	}
+	c, _, _ := newControllerFixture(t, 1, assignments, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
+	err := c.Reconcile(context.Background(), ref)
+	if err == nil || err.Error() != "delete failed" {
+		t.Fatalf("got %v, want delete failed error", err)
+	}
+	if executor.deleteCalls != 1 {
+		t.Fatalf("executor called %d times, want 1", executor.deleteCalls)
+	}
+	if scheduler.calls != 0 {
+		t.Fatalf("scheduler called %d times, want 0", scheduler.calls)
 	}
 }

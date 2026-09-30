@@ -75,3 +75,31 @@ func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (m
 	assignment.ContainerID = string(containerID)
 	return assignment, nil
 }
+
+func (s *Service) DeleteAssignment(ctx context.Context, assignmentID string) error {
+	assignment, err := s.assignmentStore.GetAssignment(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+
+	if assignment.ContainerID == "" {
+		return fmt.Errorf("assignment %s has no container ID", assignmentID)
+	}
+
+	node, err := s.nodeStore.GetNode(ctx, assignment.NodeID)
+	if err != nil {
+		return err
+	}
+
+	err = s.executor.DeleteContainer(ctx, node, runtime.ContainerID(assignment.ContainerID))
+	if err != nil {
+		return err
+	}
+
+	err = s.assignmentStore.UpdateStatusAssignment(ctx, assignmentID, model.AssignmentStatusCompleted)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

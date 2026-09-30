@@ -65,3 +65,35 @@ func TestClientHonorsCanceledContext(t *testing.T) {
 		t.Fatal("expected cancellation error")
 	}
 }
+
+func TestDeleteContainer(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/containers/container-1" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	err := New(server.Client()).DeleteContainer(context.Background(), model.Node{Address: server.URL}, "container-1")
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDeleteContainerEmptyID(t *testing.T) {
+	err := New(http.DefaultClient).DeleteContainer(context.Background(), model.Node{Address: "localhost:1"}, "")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestDeleteContainerUnexpectedStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	err := New(server.Client()).DeleteContainer(context.Background(), model.Node{Address: server.URL}, "container-1")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

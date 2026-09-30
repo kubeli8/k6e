@@ -9,4 +9,5 @@ import (
 
 type ContainerExecutor interface {
 	RunContainer(ctx context.Context, node model.Node, spec runtime.ContainerSpec) (runtime.ContainerID, error)
+	DeleteContainer(ctx context.Context, node model.Node, containerID runtime.ContainerID) error
 }

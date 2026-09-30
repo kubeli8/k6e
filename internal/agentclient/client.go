@@ -76,6 +76,18 @@ func (c *Client) InspectContainer(ctx context.Context, node model.Node, id runti
 	return info, nil
 }
 
+func (c *Client) DeleteContainer(ctx context.Context, node model.Node, id runtime.ContainerID) error {
+	if id == "" {
+		return fmt.Errorf("container ID is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, nodeURL(node, "/api/v1/containers/"+string(id)), nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	return c.doJSON(req, http.StatusNoContent, nil)
+}
+
 func (c *Client) doJSON(req *http.Request, expectedStatus int, target any) error {
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -86,6 +98,10 @@ func (c *Client) doJSON(req *http.Request, expectedStatus int, target any) error
 	if resp.StatusCode != expectedStatus {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		return fmt.Errorf("unexpected status code: %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	if target == nil {
+		return nil
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {

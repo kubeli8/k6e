@@ -207,3 +207,91 @@ func TestServerInspectContainerRuntimeError(t *testing.T) {
 		t.Error("expected Inspect() to be called")
 	}
 }
+
+func TestServerDeleteContainer(t *testing.T) {
+	fakeRuntime := &FakeRuntime{}
+	ag := New(fakeRuntime, nil, nil)
+	server := NewServer(ag)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/containers/fake-container-123",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204, not %d", rec.Code)
+	}
+
+	if !fakeRuntime.stopCalled {
+		t.Error("expected Stop() to be called while deleting a container")
+	}
+
+	if !fakeRuntime.removeCalled {
+		t.Error("expected Remove() to be called while deleting a container")
+	}
+}
+
+func TestServerDeleteContainerStopError(t *testing.T) {
+	fakeRuntime := &FakeRuntime{
+		stopError: errors.New("stop failed"),
+	}
+	ag := New(fakeRuntime, nil, nil)
+	server := NewServer(ag)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/containers/fake-container-123",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, not %d", rec.Code)
+	}
+
+	if !fakeRuntime.stopCalled {
+		t.Error("expected Stop() to be called while deleting a container")
+	}
+
+	if fakeRuntime.removeCalled {
+		t.Error("expected Remove() not to be called when Stop() fails")
+	}
+}
+
+func TestServerDeleteContainerRemoveError(t *testing.T) {
+	fakeRuntime := &FakeRuntime{
+		removeError: errors.New("remove failed"),
+	}
+	ag := New(fakeRuntime, nil, nil)
+	server := NewServer(ag)
+
+	req := httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/containers/fake-container-123",
+		nil,
+	)
+
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, not %d", rec.Code)
+	}
+
+	if !fakeRuntime.stopCalled {
+		t.Error("expected Stop() to be called while deleting a container")
+	}
+
+	if !fakeRuntime.removeCalled {
+		t.Error("expected Remove() to be called while deleting a container")
+	}
+}

@@ -17,7 +17,9 @@ type FakeRuntime struct {
 	stopCalled   bool
 	removeCalled bool
 
-	startError error
+	startError  error
+	stopError   error
+	removeError error
 
 	inspectCalled bool
 	inspectID     runtime.ContainerID
@@ -60,12 +62,12 @@ func (f *FakeRuntime) Inspect(ctx context.Context, id runtime.ContainerID) (runt
 
 func (f *FakeRuntime) Stop(ctx context.Context, id runtime.ContainerID) error {
 	f.stopCalled = true
-	return nil
+	return f.stopError
 }
 
 func (f *FakeRuntime) Remove(ctx context.Context, id runtime.ContainerID) error {
 	f.removeCalled = true
-	return nil
+	return f.removeError
 }
 
 func (f *FakeRegistrar) Register(ctx context.Context, node model.Node) error {

@@ -91,3 +91,67 @@ func TestReplicaStatePendingCountsAsInFlight(t *testing.T) {
 		t.Fatalf("expected missing=0, got %d", state.Missing())
 	}
 }
+
+func TestReplicaStateDelete(t *testing.T) {
+	state := ReplicaState{
+		Desired:  2,
+		Running:  4,
+		Pending:  1,
+		Assigned: 5,
+	}
+
+	if state.Delete() != 2 {
+		t.Fatalf("expected delete=2, got %d", state.Delete())
+	}
+
+	if state.Extra() != 3 {
+		t.Fatalf("expected extra=3, got %d", state.Extra())
+	}
+}
+
+func TestReplicaStateDeleteWithPending(t *testing.T) {
+	state := ReplicaState{
+		Desired: 1,
+		Running: 2,
+		Pending: 1,
+	}
+
+	if state.Delete() != 1 {
+		t.Fatalf("expected delete=1, got %d", state.Delete())
+	}
+}
+
+func TestReplicaStateDeleteAll(t *testing.T) {
+	state := ReplicaState{
+		Desired:  0,
+		Running:  3,
+		Pending:  1,
+		Assigned: 4,
+	}
+
+	if state.Delete() != 3 {
+		t.Fatalf("expected delete=3, got %d", state.Delete())
+	}
+	if state.Extra() != 4 {
+		t.Fatalf("expected extra=4, got %d", state.Extra())
+	}
+}
+
+func TestDecideScaleDown(t *testing.T) {
+	state := ReplicaState{
+		Desired:  2,
+		Running:  3,
+		Pending:  1,
+		Assigned: 4,
+	}
+
+	decision := Decide(state)
+
+	if decision.Create != 0 {
+		t.Fatalf("expected create=0, got %d", decision.Create)
+	}
+
+	if decision.Delete != 1 {
+		t.Fatalf("expected delete=1, got %d", decision.Delete)
+	}
+}

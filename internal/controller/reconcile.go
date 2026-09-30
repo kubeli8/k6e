@@ -13,6 +13,7 @@ import (
 
 type ReconcileDecision struct {
 	Create int
+	Delete int
 }
 
 type WorkloadScheduler interface {
@@ -22,6 +23,7 @@ type WorkloadScheduler interface {
 // AssignmentExecutor advances a scheduled assignment through its worker-side execution.
 type AssignmentExecutor interface {
 	ExecuteAssignment(ctx context.Context, assignmentID string) (model.Assignment, error)
+	DeleteAssignment(ctx context.Context, assignmentID string) error
 }
 
 type Controller struct {
@@ -58,6 +60,7 @@ func NewController(
 func Decide(state ReplicaState) ReconcileDecision {
 	decision := ReconcileDecision{
 		Create: state.Missing(),
+		Delete: state.Delete(),
 	}
 	return decision
 }
@@ -167,9 +170,40 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 		}
 	}
 
+	for i := 0; i < decision.Delete; i++ {
+		assignments, err := c.assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+		if err != nil {
+			return err
+		}
+		if len(assignments) == 0 {
+			return fmt.Errorf("no assignments found for workload %s", ref.Name)
+		}
+
+		assignment := returnFirstRunningAssignment(assignments)
+		if assignment == nil {
+			return fmt.Errorf("no running assignments found for workload %s", ref.Name)
+		}
+
+		if c.executor == nil {
+			return fmt.Errorf("assignment executor not configured")
+		}
+		if err := c.executor.DeleteAssignment(ctx, assignment.ID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (c *Controller) ObserveAssignment(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
 	return c.observer.Inspect(ctx, assignment)
+}
+
+func returnFirstRunningAssignment(assignments []model.Assignment) *model.Assignment {
+	for i := range assignments {
+		if assignments[i].Status == model.AssignmentStatusRunning {
+			return &assignments[i]
+		}
+	}
+	return nil
 }

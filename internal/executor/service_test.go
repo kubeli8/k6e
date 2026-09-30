@@ -181,6 +181,13 @@ func (f *fakeExecutor) RunContainer(ctx context.Context, node model.Node, spec r
 	return f.containerID, nil
 }
 
+func (f *fakeExecutor) DeleteContainer(ctx context.Context, node model.Node, containerID runtime.ContainerID) error {
+	f.called = true
+	f.node = node
+	f.containerID = containerID
+	return f.err
+}
+
 func TestExecuteAssignment(t *testing.T) {
 	ctx := context.Background()
 
@@ -330,6 +337,72 @@ func TestExecuteAssignmentExecutorFailure(t *testing.T) {
 			"expected persisted status %q, got %q",
 			model.AssignmentStatusFailed,
 			assignmentStore.updatedStatus,
+		)
+	}
+}
+
+func TestDeleteAssignment(t *testing.T) {
+	ctx := context.Background()
+	workload := testWorkload("nginx", "default")
+	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
+	assignment := testAssignment("nginx", "default", node.ID, "container-123", model.AssignmentStatusRunning)
+
+	assignmentStore := &fakeAssignmentStore{assignment: assignment}
+	workloadStore := &fakeWorkloadStore{workload: workload}
+	nodeStore := &fakeNodeStore{node: node}
+	executor := &fakeExecutor{}
+	service := NewService(assignmentStore, workloadStore, nodeStore, executor)
+
+	err := service.DeleteAssignment(ctx, assignment.ID)
+	if err != nil {
+		t.Fatalf("DeleteAssignment returned error: %v", err)
+	}
+
+	if !executor.called {
+		t.Fatal("expected executor to be called")
+	}
+
+	if executor.node.ID != node.ID {
+		t.Fatalf("executor called with unexpected node ID: %s", executor.node.ID)
+	}
+
+	if executor.containerID != "container-123" {
+		t.Fatalf("executor called with unexpected container ID: %s", executor.containerID)
+	}
+}
+
+func TestDeleteAssignmentNoContainerID(t *testing.T) {
+	ctx := context.Background()
+	assignment := testAssignment("nginx", "default", "node-1", "", model.AssignmentStatusRunning)
+
+	assignmentStore := &fakeAssignmentStore{assignment: assignment}
+	service := NewService(assignmentStore, &fakeWorkloadStore{}, &fakeNodeStore{}, &fakeExecutor{})
+
+	err := service.DeleteAssignment(ctx, assignment.ID)
+	if err == nil {
+		t.Fatal("expected error when deleting assignment with no container ID")
+	}
+}
+
+func TestDeleteAssignmentDeleteContainerError(t *testing.T) {
+	ctx := context.Background()
+	workload := testWorkload("nginx", "default")
+	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
+	assignment := testAssignment("nginx", "default", node.ID, "container-123", model.AssignmentStatusRunning)
+
+	assignmentStore := &fakeAssignmentStore{assignment: assignment}
+	workloadStore := &fakeWorkloadStore{workload: workload}
+	nodeStore := &fakeNodeStore{node: node}
+	executorErr := errors.New("failed to delete container")
+	executor := &fakeExecutor{err: executorErr}
+	service := NewService(assignmentStore, workloadStore, nodeStore, executor)
+
+	err := service.DeleteAssignment(ctx, assignment.ID)
+	if !errors.Is(err, executorErr) {
+		t.Fatalf(
+			"expected error %v, got %v",
+			executorErr,
+			err,
 		)
 	}
 }
