@@ -39,6 +39,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/workloads", s.createWorkload)
 	mux.HandleFunc("GET /api/v1/workloads", s.listWorkloads)
 	mux.HandleFunc("GET /api/v1/workloads/{namespace}/{name}", s.getWorkload)
+	mux.HandleFunc("PUT /api/v1/workloads/{namespace}/{name}", s.updateWorkload)
 	mux.HandleFunc("DELETE /api/v1/workloads/{namespace}/{name}", s.deleteWorkload)
 
 	// Node endpoints

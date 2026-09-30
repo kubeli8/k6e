@@ -84,6 +84,46 @@ func (s *Server) getWorkload(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(workload)
 }
 
+func (s *Server) updateWorkload(w http.ResponseWriter, r *http.Request) {
+	namespace := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	if strings.TrimSpace(namespace) == "" || strings.TrimSpace(name) == "" {
+		writeError(w, http.StatusBadRequest, "Namespace and name are required")
+		return
+	}
+
+	var workload model.Workload
+	if err := json.NewDecoder(r.Body).Decode(&workload); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
+		return
+	}
+
+	if workload.Metadata.Namespace != namespace || workload.Metadata.Name != name {
+		writeError(w, http.StatusBadRequest, "Namespace and name in the payload must match the URL")
+		return
+	}
+
+	if err := validateWorkload(workload); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := s.workloadStore.Update(r.Context(), model.WorkloadRef{Namespace: namespace, Name: name}, workload); err != nil {
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			writeError(w, http.StatusNotFound, "Workload not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to update workload")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(workload)
+}
+
 func (s *Server) deleteWorkload(w http.ResponseWriter, r *http.Request) {
 	namespace := r.PathValue("namespace")
 	name := r.PathValue("name")

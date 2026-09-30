@@ -340,6 +340,140 @@ func TestWorkloadListEmpty(t *testing.T) {
 	}
 }
 
+func TestWorkloadUpdate(t *testing.T) {
+	server := testServer()
+
+	workload := testWorkload("test-workload", "default")
+	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
+		t.Fatalf("Failed to create initial workload: %v", err)
+	}
+
+	body := `{
+	"apiVersion": "k6e.io/v1alpha1",
+		"kind": "Workload",
+		"metadata": {
+			"name": "test-workload",
+			"namespace": "default"
+		},
+		"spec": {
+			"replicas": 7,
+			"template": {
+				"containers": [
+					{
+						"name": "nginx",
+						"image": "nginx:1.29"
+					}
+				]
+			}
+		}
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/workloads/default/test-workload",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var updatedWorkload model.Workload
+	if err := json.NewDecoder(rec.Body).Decode(&updatedWorkload); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if updatedWorkload.Spec.Replicas != 7 {
+		t.Fatalf("Expected 7 replicas, got %d", updatedWorkload.Spec.Replicas)
+	}
+
+	if updatedWorkload.Spec.Template.Containers[0].Image != "nginx:1.29" {
+		t.Fatalf("Expected container image 'nginx:1.29', got '%s'", updatedWorkload.Spec.Template.Containers[0].Image)
+	}
+}
+
+func TestWorkloadUpdateNotFound(t *testing.T) {
+	server := testServer()
+
+	body := `{
+	"apiVersion": "k6e.io/v1alpha1",
+		"kind": "Workload",
+		"metadata": {
+			"name": "nonexistent-workload",
+			"namespace": "default"
+		},
+		"spec": {
+			"replicas": 7,
+			"template": {
+				"containers": [
+					{
+						"name": "nginx",
+						"image": "nginx:latest"
+					}
+				]
+			}
+		}
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/workloads/default/nonexistent-workload",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("Expected status code %d, got %d", http.StatusNotFound, rec.Code)
+	}
+}
+
+func TestWorkloadUpdateIdentityMismatch(t *testing.T) {
+	server := testServer()
+
+	workload := testWorkload("test-workload", "default")
+	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
+		t.Fatalf("Failed to create initial workload: %v", err)
+	}
+
+	body := `{
+	"apiVersion": "k6e.io/v1alpha1",
+		"kind": "Workload",
+		"metadata": {
+			"name": "different-workload",
+			"namespace": "different-namespace"
+		},
+		"spec": {
+			"replicas": 7,
+			"template": {
+				"containers": [
+					{
+						"name": "nginx",
+						"image": "nginx:latest"
+					}
+				]
+			}
+		}
+	}`
+
+	req := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/workloads/default/test-workload",
+		strings.NewReader(body),
+	)
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("Expected status code %d, got %d", http.StatusBadRequest, rec.Code)
+	}
+}
+
 func TestWorkloadDelete(t *testing.T) {
 	server := testServer()
 

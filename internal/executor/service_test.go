@@ -108,7 +108,7 @@ type fakeWorkloadStore struct {
 }
 
 func (f *fakeWorkloadStore) Create(ctx context.Context, workload model.Workload) error {
-	return nil
+	return f.getErr
 }
 
 func (f *fakeWorkloadStore) Get(ctx context.Context, ref model.WorkloadRef) (model.Workload, error) {
@@ -120,11 +120,15 @@ func (f *fakeWorkloadStore) Get(ctx context.Context, ref model.WorkloadRef) (mod
 }
 
 func (f *fakeWorkloadStore) List(ctx context.Context, namespace string) ([]model.Workload, error) {
-	return nil, nil
+	return nil, f.getErr
+}
+
+func (f *fakeWorkloadStore) Update(ctx context.Context, ref model.WorkloadRef, workload model.Workload) error {
+	return f.getErr
 }
 
 func (f *fakeWorkloadStore) Delete(ctx context.Context, ref model.WorkloadRef) error {
-	return nil
+	return f.getErr
 }
 
 type fakeNodeStore struct {

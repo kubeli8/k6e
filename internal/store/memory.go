@@ -71,6 +71,23 @@ func (s *MemoryStore) List(ctx context.Context, namespace string) ([]model.Workl
 	return workloads, nil
 }
 
+func (s *MemoryStore) Update(ctx context.Context, ref model.WorkloadRef, workload model.Workload) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	key := workloadKey(ref.Namespace, ref.Name)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.workloads[key]; !exists {
+		return ErrNotFound
+	}
+
+	s.workloads[key] = workload
+	return nil
+}
+
 func (s *MemoryStore) Delete(ctx context.Context, ref model.WorkloadRef) error {
 	if err := ctx.Err(); err != nil {
 		return err

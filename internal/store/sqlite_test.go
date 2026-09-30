@@ -197,6 +197,63 @@ func TestSQLiteStore_List(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_Update(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	workload := testWorkload("test-workload", "default")
+	ctx := context.Background()
+
+	if err := store.Create(ctx, workload); err != nil {
+		t.Fatalf("failed to create workload: %v", err)
+	}
+
+	// Update the workload's replicas
+	workload.Spec.Replicas = 5
+	if err := store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload); err != nil {
+		t.Fatalf("failed to update workload: %v", err)
+	}
+
+	retrievedWorkload, err := store.Get(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name})
+	if err != nil {
+		t.Fatalf("failed to get workload after update: %v", err)
+	}
+
+	if retrievedWorkload.Spec.Replicas != 5 {
+		t.Errorf("expected workload replicas to be updated to 5, got %d", retrievedWorkload.Spec.Replicas)
+	}
+}
+
+func TestSQLiteStore_UpdateNotFound(t *testing.T) {
+	store, err := NewSQLiteStore(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create SQLiteStore: %v", err)
+	}
+	defer func() {
+		if err := store.Close(); err != nil {
+			t.Errorf("failed to close SQLiteStore: %v", err)
+		}
+	}()
+
+	workload := testWorkload("nonexistent-workload", "default")
+	ctx := context.Background()
+
+	err = store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload)
+	if err == nil {
+		t.Fatalf("expected error when updating non-existent workload, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got: %v", err)
+	}
+}
+
 func TestSQLiteStore_Delete(t *testing.T) {
 	store, err := NewSQLiteStore(":memory:")
 	if err != nil {

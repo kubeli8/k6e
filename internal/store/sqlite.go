@@ -152,6 +152,42 @@ func (s *SQLiteStore) List(ctx context.Context, namespace string) ([]model.Workl
 	return workloads, nil
 }
 
+func (s *SQLiteStore) Update(ctx context.Context, ref model.WorkloadRef, workload model.Workload) error {
+	specJSON, err := json.Marshal(workload.Spec)
+	if err != nil {
+		return fmt.Errorf("marshal workload spec: %w", err)
+	}
+
+	query := `
+	UPDATE workloads
+	SET api_version = ?, kind = ?, spec_json = ?
+	WHERE namespace = ? AND name = ?
+	`
+
+	result, err := s.db.ExecContext(ctx, query,
+		workload.APIVersion,
+		workload.Kind,
+		string(specJSON),
+		ref.Namespace,
+		ref.Name,
+	)
+
+	if err != nil {
+		return fmt.Errorf("update workload: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
 func (s *SQLiteStore) Delete(ctx context.Context, ref model.WorkloadRef) error {
 	query := `
 	DELETE FROM workloads

@@ -139,3 +139,43 @@ func TestMemoryStoreList(t *testing.T) {
 		t.Fatalf("List() got = %v, want = %v", len(got), 2)
 	}
 }
+
+func TestMemoryStoreUpdate(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+
+	workload := testWorkload("test-workload", "default")
+
+	if err := store.Create(ctx, workload); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Update the workload's replicas
+	workload.Spec.Replicas = 5
+
+	if err := store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	got, err := store.Get(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name})
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	if got.Spec.Replicas != 5 {
+		t.Errorf("Get() after Update got = %v, want = %v", got.Spec.Replicas, 5)
+	}
+}
+
+func TestMemoryStoreUpdateNotFound(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+
+	workload := testWorkload("nonexistent-workload", "default")
+
+	err := store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload)
+
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Update() expected error = %v, got = %v", ErrNotFound, err)
+	}
+}
