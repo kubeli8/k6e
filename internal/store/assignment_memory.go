@@ -8,11 +8,14 @@ import (
 	"github.com/pyd-07/k6e/internal/runtime"
 )
 
+// MemoryAssignmentStore is an in-memory AssignmentStore guarded by an
+// RWMutex, suitable for tests and non-persistent deployments.
 type MemoryAssignmentStore struct {
 	mu          sync.RWMutex
 	assignments map[string]model.Assignment
 }
 
+// NewMemoryAssignmentStore constructs an empty in-memory assignment store.
 func NewMemoryAssignmentStore() *MemoryAssignmentStore {
 	return &MemoryAssignmentStore{
 		assignments: make(map[string]model.Assignment),

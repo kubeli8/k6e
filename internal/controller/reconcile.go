@@ -1,3 +1,19 @@
+// Package controller implements the k6e reconciliation loop. It periodically
+// compares the desired state declared by Workload resources against the
+// observed state of running containers, and schedules or deletes assignments
+// to converge them.
+//
+// The reconciliation flow for each workload is:
+//
+//  1. Observe: inspect every Running assignment with a ContainerID via the
+//     RuntimeObserver to detect containers that have stopped unexpectedly.
+//  2. Calculate: derive a ReplicaState from the workload's desired replica
+//     count and the current status of all its assignments.
+//  3. Decide: produce a ReconcileDecision that specifies how many replicas
+//     to create or delete.
+//  4. Converge: call the WorkloadScheduler and AssignmentExecutor for each
+//     missing replica; call AssignmentExecutor.DeleteAssignment for each
+//     excess running assignment.
 package controller
 
 import (
@@ -11,21 +27,31 @@ import (
 	"github.com/pyd-07/k6e/internal/store"
 )
 
+// ReconcileDecision is the output of Decide: the number of replicas to create
+// and the number of running replicas to delete in a single reconciliation pass.
 type ReconcileDecision struct {
 	Create int
 	Delete int
 }
 
+// WorkloadScheduler selects a node for a workload replica and persists a new
+// Assignment in the Pending state.
 type WorkloadScheduler interface {
 	ScheduleWorkload(ctx context.Context, ref model.WorkloadRef) (model.Assignment, error)
 }
 
-// AssignmentExecutor advances a scheduled assignment through its worker-side execution.
+// AssignmentExecutor carries out a scheduled assignment on its target node:
+// ExecuteAssignment starts the container and records the result on the
+// assignment; DeleteAssignment stops and removes the container for a
+// scale-down.
 type AssignmentExecutor interface {
 	ExecuteAssignment(ctx context.Context, assignmentID string) (model.Assignment, error)
 	DeleteAssignment(ctx context.Context, assignmentID string) error
 }
 
+// Controller drives the reconciliation loop for all workloads in a namespace.
+// It runs on a fixed interval and processes each workload independently,
+// logging but not aborting on per-workload errors.
 type Controller struct {
 	workloadStore   store.WorkloadStore
 	assignmentStore store.AssignmentStore
@@ -37,6 +63,8 @@ type Controller struct {
 	interval  time.Duration
 }
 
+// NewController constructs a Controller. interval must be positive; Start
+// will return an error immediately if it is not.
 func NewController(
 	workloadStore store.WorkloadStore,
 	assignmentStore store.AssignmentStore,
@@ -57,6 +85,11 @@ func NewController(
 	}
 }
 
+// Decide translates a ReplicaState into a ReconcileDecision. The number of
+// replicas to create equals the number of missing replicas; the number to
+// delete equals the number of running replicas above the desired count.
+// Pending replicas are treated as in-flight and count toward the desired
+// total, so they are neither re-created nor deleted.
 func Decide(state ReplicaState) ReconcileDecision {
 	decision := ReconcileDecision{
 		Create: state.Missing(),
@@ -65,6 +98,10 @@ func Decide(state ReplicaState) ReconcileDecision {
 	return decision
 }
 
+// Start performs an immediate reconciliation pass and then reconciles on every
+// tick of interval until ctx is cancelled. A failing reconciliation pass is
+// logged but does not stop the loop. Start returns ctx.Err() when the context
+// is cancelled, or an error if interval is non-positive.
 func (c *Controller) Start(ctx context.Context) error {
 	if c.interval <= 0 {
 		return fmt.Errorf("controller reconciliation interval must be positive")
@@ -89,6 +126,9 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 }
 
+// ReconcileAll reconciles every workload in the controller's namespace.
+// It returns the first error encountered while still attempting to reconcile
+// all remaining workloads.
 func (c *Controller) ReconcileAll(ctx context.Context) error {
 	workloads, err := c.workloadStore.List(ctx, c.namespace)
 	if err != nil {
@@ -112,6 +152,16 @@ func (c *Controller) ReconcileAll(ctx context.Context) error {
 	return firstError
 }
 
+// Reconcile drives a single workload toward its desired state. It:
+//  1. Inspects each Running assignment that has a ContainerID to detect
+//     containers that have stopped; stopped containers transition to Failed.
+//  2. Calculates the ReplicaState and derives a ReconcileDecision.
+//  3. Schedules and executes new assignments for each missing replica.
+//  4. Deletes running assignments for each excess replica.
+//
+// Reconcile is not idempotent across the scheduler: if scheduling succeeds but
+// execution fails, the pending assignment is left in the store and will be
+// counted as in-flight on the next pass.
 func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error {
 	workload, err := c.workloadStore.Get(ctx, ref)
 	if err != nil {
@@ -195,6 +245,8 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 	return nil
 }
 
+// ObserveAssignment queries the runtime state of the container associated with
+// assignment by forwarding the request to the RuntimeObserver.
 func (c *Controller) ObserveAssignment(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
 	return c.observer.Inspect(ctx, assignment)
 }
@@ -206,4 +258,19 @@ func returnFirstRunningAssignment(assignments []model.Assignment) *model.Assignm
 		}
 	}
 	return nil
+}
+
+// obsoleteAssignments returns the assignments that IsAssignmentObsolete
+// considers stale for currentTemplateHash. It returns nil when no assignment
+// is obsolete.
+func obsoleteAssignments(assignments []model.Assignment, currentTemplateHash string) []model.Assignment {
+	var obsolete []model.Assignment
+
+	for _, assignment := range assignments {
+		if IsAssignmentObsolete(assignment, currentTemplateHash) {
+			obsolete = append(obsolete, assignment)
+		}
+	}
+
+	return obsolete
 }

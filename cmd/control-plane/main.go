@@ -1,3 +1,7 @@
+// Command control-plane runs the k6e control plane: the REST API server,
+// backed by a SQLite store, plus two background loops - the workload
+// reconciliation controller and the node liveness checker - started as
+// goroutines before ListenAndServe.
 package main
 
 import (

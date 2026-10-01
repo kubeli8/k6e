@@ -10,6 +10,9 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 )
 
+// RegisterNode upserts the node record. If a node with the same ID already
+// exists, its address, status, and last_heartbeat are overwritten. If
+// LastHeartbeat is zero, it is set to the current time before persisting.
 func (s *SQLiteStore) RegisterNode(ctx context.Context, node model.Node) error {
 	if node.LastHeartbeat.IsZero() {
 		node.LastHeartbeat = time.Now()
@@ -105,6 +108,9 @@ func (s *SQLiteStore) RemoveNode(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateHeartbeat records timestamp as the node's last heartbeat and
+// unconditionally sets the node's status to NodeStatusReady. Returns
+// ErrNotFound if no node with the given id exists.
 func (s *SQLiteStore) UpdateHeartbeat(ctx context.Context, id string, timestamp time.Time) error {
 	query := `
 	UPDATE nodes

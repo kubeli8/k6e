@@ -7,6 +7,11 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 )
 
+// validateWorkload checks that a decoded Workload carries the required
+// identity fields and a usable spec: apiVersion, kind, metadata.name,
+// metadata.namespace, at least one replica, and at least one container with
+// a name and image. It returns a descriptive error for the first violation,
+// suitable for surfacing directly in a 400 response.
 func validateWorkload(workload model.Workload) error {
 	if workload.APIVersion == "" {
 		return fmt.Errorf("apiversion is required")
@@ -43,6 +48,8 @@ func validateWorkload(workload model.Workload) error {
 	return nil
 }
 
+// validateNode checks that a decoded Node registration carries a non-empty
+// ID and address and a recognized status.
 func validateNode(node model.Node) error {
 	if strings.TrimSpace(node.ID) == "" {
 		return fmt.Errorf("node ID is required")

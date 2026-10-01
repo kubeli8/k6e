@@ -19,6 +19,8 @@ func NewMemoryNodeStore() *MemoryNodeStore {
 	}
 }
 
+// RegisterNode upserts the node. If LastHeartbeat is zero, it is set to the
+// current time before the record is stored.
 func (s *MemoryNodeStore) RegisterNode(ctx context.Context, node model.Node) error {
 	if node.LastHeartbeat.IsZero() {
 		node.LastHeartbeat = time.Now()
@@ -63,6 +65,8 @@ func (s *MemoryNodeStore) RemoveNode(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateHeartbeat records timestamp as the node's last heartbeat and
+// unconditionally sets the node's status to NodeStatusReady.
 func (s *MemoryNodeStore) UpdateHeartbeat(ctx context.Context, id string, timestamp time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

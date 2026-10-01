@@ -8,6 +8,9 @@ import (
 	"github.com/pyd-07/k6e/internal/store"
 )
 
+// Service coordinates the scheduling pipeline: it resolves the workload,
+// retrieves the list of available nodes, delegates placement to a Scheduler,
+// and persists the resulting Assignment.
 type Service struct {
 	workloadStore   store.WorkloadStore
 	nodeStore       store.NodeStore
@@ -24,6 +27,10 @@ func NewService(workloadStore store.WorkloadStore, nodeStore store.NodeStore, as
 	}
 }
 
+// ScheduleWorkload creates a new Pending assignment for a single replica of
+// the named workload. It captures the current template hash at the time of
+// scheduling so that stale assignments can be detected if the workload
+// template is later updated. Returns ErrNoReadyNodes if no node is available.
 func (s *Service) ScheduleWorkload(ctx context.Context, ref model.WorkloadRef) (model.Assignment, error) {
 	workload, err := s.workloadStore.Get(ctx, ref)
 	if err != nil {

@@ -12,10 +12,17 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// SQLiteStore is a durable implementation of WorkloadStore, NodeStore, and
+// AssignmentStore backed by a local SQLite database. It enables WAL mode and
+// a 5-second busy timeout on open to reduce lock contention under concurrent
+// access. All three resource tables are created if they do not already exist.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
+// NewSQLiteStore opens the SQLite database at path, enables WAL journal mode,
+// and creates the workloads, nodes, and assignments tables if they do not
+// already exist. The caller is responsible for calling Close when done.
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -45,6 +52,7 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	return store, nil
 }
 
+// Close releases the underlying database connection.
 func (s *SQLiteStore) Close() error {
 	if s.db != nil {
 		return s.db.Close()

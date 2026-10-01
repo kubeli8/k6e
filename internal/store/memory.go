@@ -7,11 +7,15 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 )
 
+// MemoryStore is an in-memory WorkloadStore guarded by an RWMutex,
+// suitable for tests and non-persistent deployments. Unlike the memory node
+// and assignment stores it checks ctx.Err before each operation.
 type MemoryStore struct {
 	mu        sync.RWMutex
 	workloads map[string]model.Workload
 }
 
+// NewMemoryStore constructs an empty in-memory workload store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		workloads: make(map[string]model.Workload),

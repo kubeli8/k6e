@@ -1,3 +1,6 @@
+// Command agent runs the k6e node agent: it registers the node with the
+// control plane, heartbeats to keep it Ready, and serves the container API
+// backed by the local Docker runtime.
 package main
 
 import (

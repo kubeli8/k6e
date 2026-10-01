@@ -9,6 +9,9 @@ import (
 	"github.com/pyd-07/k6e/internal/store"
 )
 
+// Service executes and deletes assignments on behalf of the controller and
+// the HTTP API. It pairs assignment-store bookkeeping with container
+// operations performed by a ContainerExecutor.
 type Service struct {
 	assignmentStore store.AssignmentStore
 	workloadStore   store.WorkloadStore
@@ -16,6 +19,9 @@ type Service struct {
 	executor        ContainerExecutor
 }
 
+// NewService constructs a Service. All three stores and the executor must be
+// non-nil for the service to operate; ExecuteAssignment returns an error when
+// a dependency fails to resolve a required record.
 func NewService(
 	assignmentStore store.AssignmentStore,
 	workloadStore store.WorkloadStore,
@@ -30,6 +36,25 @@ func NewService(
 	}
 }
 
+// ExecuteAssignment starts the container for a Pending assignment and records
+// the outcome on the assignment.
+//
+// It enforces two safety checks before starting anything:
+//
+//   - Stale-template protection: the assignment's TemplateHash must match the
+//     current hash of the workload's template. On mismatch the assignment is
+//     marked Failed and an error is returned, preventing containers from being
+//     started from an outdated template during a rollout.
+//   - Single-container requirement: the workload template must contain exactly
+//     one container, which is the current k6e limitation.
+//
+// The container is named "k6e-<container name>-<first 8 chars of the
+// assignment ID>" to keep names unique across assignments.
+//
+// If the container fails to start, the assignment is marked Failed with no
+// container ID and the error is returned alongside the failed assignment. On
+// success the assignment is updated to Running with its container ID and
+// returned.
 func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (model.Assignment, error) {
 	assignment, err := s.assignmentStore.GetAssignment(ctx, assignmentID)
 	if err != nil {
@@ -82,6 +107,10 @@ func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (m
 	return assignment, nil
 }
 
+// DeleteAssignment stops and removes the container backing an assignment and
+// marks it Completed. It returns an error if the assignment has no container
+// ID (it never started) or if the stop or remove operation fails; the status
+// is only updated after the container has been successfully removed.
 func (s *Service) DeleteAssignment(ctx context.Context, assignmentID string) error {
 	assignment, err := s.assignmentStore.GetAssignment(ctx, assignmentID)
 	if err != nil {

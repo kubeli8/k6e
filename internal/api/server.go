@@ -1,3 +1,7 @@
+// Package api implements the control plane's HTTP API for workloads, nodes,
+// scheduling, and assignment execution. Handlers map store sentinel errors
+// (ErrNotFound, ErrAlreadyExists) and scheduler.ErrNoReadyNodes onto HTTP
+// status codes.
 package api
 
 import (
@@ -8,6 +12,8 @@ import (
 	"github.com/pyd-07/k6e/internal/store"
 )
 
+// Server hosts the control plane's REST endpoints, backed by the stores and
+// delegating scheduling and execution to their services.
 type Server struct {
 	workloadStore   store.WorkloadStore
 	nodeStore       store.NodeStore
@@ -16,6 +22,8 @@ type Server struct {
 	executor        *executor.Service
 }
 
+// NewServer constructs the control-plane API server over the given stores
+// and services.
 func NewServer(
 	workloadStore store.WorkloadStore,
 	nodeStore store.NodeStore,
@@ -32,6 +40,9 @@ func NewServer(
 	}
 }
 
+// Handler returns the control plane's HTTP API: CRUD for Workloads and
+// Nodes, node heartbeat handling, workload scheduling, and assignment
+// execution.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 

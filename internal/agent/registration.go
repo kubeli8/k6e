@@ -10,15 +10,22 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 )
 
+// NodeRegistrar registers a node with the control plane so that the
+// scheduler can place assignments on it.
 type NodeRegistrar interface {
 	Register(ctx context.Context, node model.Node) error
 }
 
+// HTTPNodeRegistrar registers nodes by POSTing the node record to the
+// control plane's node endpoint. Registration is an upsert on the control
+// plane, so it is safe to re-register after an agent restart.
 type HTTPNodeRegistrar struct {
 	baseURL string
 	client  *http.Client
 }
 
+// NewHTTPNodeRegistrar constructs a registrar targeting the control plane
+// at baseURL.
 func NewHTTPNodeRegistrar(baseURL string) *HTTPNodeRegistrar {
 	return &HTTPNodeRegistrar{
 		baseURL: baseURL,
@@ -26,6 +33,8 @@ func NewHTTPNodeRegistrar(baseURL string) *HTTPNodeRegistrar {
 	}
 }
 
+// Register marshals the node record and POSTs it to the control plane. It
+// expects a 201 Created response and treats any other status as failure.
 func (r *HTTPNodeRegistrar) Register(ctx context.Context, node model.Node) error {
 	body, err := json.Marshal(node)
 	if err != nil {

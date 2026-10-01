@@ -7,10 +7,15 @@ import (
 	"github.com/pyd-07/k6e/internal/runtime"
 )
 
+// Server exposes the agent's container operations over HTTP. It is the
+// endpoint the control plane's agent client calls to run, inspect, and
+// delete containers on this node.
 type Server struct {
 	agent *Agent
 }
 
+// NewServer constructs a Server that delegates all container operations to
+// the given agent.
 func NewServer(ag *Agent) *Server {
 	return &Server{
 		agent: ag,
@@ -27,6 +32,11 @@ type RunContainerResponse struct {
 	ContainerID string `json:"containerId"`
 }
 
+// Handler returns the agent's HTTP API:
+//
+//	POST   /api/v1/containers        run a container
+//	GET    /api/v1/containers/{id}   inspect a container
+//	DELETE /api/v1/containers/{id}   stop and remove a container
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -65,6 +75,8 @@ func (s *Server) runContainer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// deleteContainer stops and removes the container in one request, matching
+// the executor's delete semantics.
 func (s *Server) deleteContainer(w http.ResponseWriter, r *http.Request) {
 	id := runtime.ContainerID(r.PathValue("id"))
 

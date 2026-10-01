@@ -11,10 +11,15 @@ import (
 	"github.com/docker/docker/client"
 )
 
+// DockerRuntime is a ContainerRuntime backed by the Docker Engine API. It
+// talks to the local Docker daemon, whose connection settings are taken from
+// the environment (DOCKER_HOST and related variables).
 type DockerRuntime struct {
 	client *client.Client
 }
 
+// NewDockerRuntime creates a Docker client configured from the environment
+// and negotiates the API version with the daemon.
 func NewDockerRuntime() (*DockerRuntime, error) {
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -29,6 +34,8 @@ func NewDockerRuntime() (*DockerRuntime, error) {
 	}, nil
 }
 
+// Create creates the container without starting it. If the image is not
+// present locally, it is pulled first and the creation is retried.
 func (r *DockerRuntime) Create(ctx context.Context, spec ContainerSpec) (ContainerID, error) {
 	cmd := append(append([]string{}, spec.Command...), spec.Args...)
 	resp, err := r.client.ContainerCreate(

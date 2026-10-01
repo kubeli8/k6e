@@ -6,15 +6,22 @@ import (
 	"net/http"
 )
 
+// HTTPNodeHeartbeater reports node liveness to the control plane by POSTing
+// to its heartbeat endpoint.
 type HTTPNodeHeartbeater struct {
 	baseURL string
 	client  *http.Client
 }
 
+// NodeHeartbeater sends heartbeats for a node to the control plane. A node
+// that stops heartbeating past the control plane's timeout is marked
+// NotReady by the liveness checker.
 type NodeHeartbeater interface {
 	Heartbeat(ctx context.Context, nodeID string) error
 }
 
+// NewHTTPNodeHeartbeater constructs a heartbeater targeting the control
+// plane at baseURL.
 func NewHTTPNodeHeartbeater(baseURL string) *HTTPNodeHeartbeater {
 	return &HTTPNodeHeartbeater{
 		baseURL: baseURL,
@@ -22,6 +29,8 @@ func NewHTTPNodeHeartbeater(baseURL string) *HTTPNodeHeartbeater {
 	}
 }
 
+// Heartbeat POSTs to the control plane's heartbeat endpoint for nodeID. It
+// expects a 204 No Content response and treats any other status as failure.
 func (h *HTTPNodeHeartbeater) Heartbeat(ctx context.Context, nodeID string) error {
 	req, err := http.NewRequestWithContext(
 		ctx,
