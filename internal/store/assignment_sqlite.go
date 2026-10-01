@@ -11,8 +11,8 @@ import (
 func (s *SQLiteStore) CreateAssignment(ctx context.Context, assignment model.Assignment) error {
 	query := `
 	INSERT INTO assignments
-		(id, workload_name, workload_namespace, node_id, status, container_id)
-	VALUES (?, ?, ?, ?, ?, ?)
+		(id, workload_name, workload_namespace, node_id, status, container_id, template_hash)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	if assignment.ID == "" {
@@ -26,6 +26,7 @@ func (s *SQLiteStore) CreateAssignment(ctx context.Context, assignment model.Ass
 		assignment.NodeID,
 		assignment.Status,
 		assignment.ContainerID,
+		assignment.TemplateHash,
 	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
@@ -38,7 +39,7 @@ func (s *SQLiteStore) CreateAssignment(ctx context.Context, assignment model.Ass
 
 func (s *SQLiteStore) GetAssignment(ctx context.Context, id string) (model.Assignment, error) {
 	query := `
-	SELECT id, workload_name, workload_namespace, node_id, status, container_id
+	SELECT id, workload_name, workload_namespace, node_id, status, container_id, template_hash
 	FROM assignments
 	WHERE id = ?
 	`
@@ -50,6 +51,7 @@ func (s *SQLiteStore) GetAssignment(ctx context.Context, id string) (model.Assig
 		&assignment.NodeID,
 		&assignment.Status,
 		&assignment.ContainerID,
+		&assignment.TemplateHash,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -62,7 +64,7 @@ func (s *SQLiteStore) GetAssignment(ctx context.Context, id string) (model.Assig
 
 func (s *SQLiteStore) ListAssignments(ctx context.Context, namespace string) ([]model.Assignment, error) {
 	query := `
-	SELECT id, workload_name, workload_namespace, node_id, status, container_id
+	SELECT id, workload_name, workload_namespace, node_id, status, container_id, template_hash
 	FROM assignments
 	WHERE workload_namespace = ?
 	`
@@ -82,6 +84,7 @@ func (s *SQLiteStore) ListAssignments(ctx context.Context, namespace string) ([]
 			&assignment.NodeID,
 			&assignment.Status,
 			&assignment.ContainerID,
+			&assignment.TemplateHash,
 		)
 		if err != nil {
 			return nil, err
@@ -94,7 +97,7 @@ func (s *SQLiteStore) ListAssignments(ctx context.Context, namespace string) ([]
 
 func (s *SQLiteStore) ListAssignmentsForWorkload(ctx context.Context, ref model.WorkloadRef) ([]model.Assignment, error) {
 	query := `
-	SELECT id, workload_name, workload_namespace, node_id, status, container_id
+	SELECT id, workload_name, workload_namespace, node_id, status, container_id, template_hash
 	FROM assignments
 	WHERE workload_name = ? AND workload_namespace = ?
 	`
@@ -114,6 +117,7 @@ func (s *SQLiteStore) ListAssignmentsForWorkload(ctx context.Context, ref model.
 			&assignment.NodeID,
 			&assignment.Status,
 			&assignment.ContainerID,
+			&assignment.TemplateHash,
 		)
 		if err != nil {
 			return nil, err

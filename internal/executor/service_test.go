@@ -21,16 +21,17 @@ type fakeAssignmentStore struct {
 	updateErr        error
 }
 
-func testAssignment(name, namespace, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
+func testAssignment(workload model.Workload, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
 	return model.Assignment{
 		ID: uuid.NewString(),
 		Workload: model.WorkloadRef{
-			Name:      name,
-			Namespace: namespace,
+			Name:      workload.Metadata.Name,
+			Namespace: workload.Metadata.Namespace,
 		},
-		NodeID:      nodeID,
-		Status:      status,
-		ContainerID: containerID,
+		NodeID:       nodeID,
+		Status:       status,
+		ContainerID:  containerID,
+		TemplateHash: model.TemplateHash(workload.Spec.Template),
 	}
 }
 
@@ -86,7 +87,11 @@ func (f *fakeAssignmentStore) ListAssignmentsForWorkload(ctx context.Context, re
 }
 
 func (f *fakeAssignmentStore) UpdateStatusAssignment(ctx context.Context, id string, status model.AssignmentStatus) error {
-	return nil
+	f.updateCalled = true
+	f.updatedID = id
+	f.updatedStatus = status
+
+	return f.updateErr
 }
 
 func (f *fakeAssignmentStore) UpdateAssignmentExecution(ctx context.Context, id string, containerID runtime.ContainerID, status model.AssignmentStatus) error {
@@ -196,8 +201,8 @@ func TestExecuteAssignment(t *testing.T) {
 	ctx := context.Background()
 
 	node := testNode("node-1", "127.0.0.1", model.NodeStatusReady)
-	assignment := testAssignment("nginx", "default", node.ID, "", model.AssignmentStatusPending)
 	workload := testWorkload("nginx", "default")
+	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -255,9 +260,10 @@ func TestExecuteAssignmentAssignmentNotFound(t *testing.T) {
 
 func TestExecuteAssignmentWorkloadNotFound(t *testing.T) {
 	expectedErr := errors.New("workload not found")
+	workload := testWorkload("nginx", "default")
 
 	assignmentStore := &fakeAssignmentStore{
-		assignment: testAssignment("nginx", "default", "node-1", "", model.AssignmentStatusPending),
+		assignment: testAssignment(workload, "node-1", "", model.AssignmentStatusPending),
 	}
 
 	workloadStore := &fakeWorkloadStore{getErr: expectedErr}
@@ -277,9 +283,10 @@ func TestExecuteAssignmentWorkloadNotFound(t *testing.T) {
 
 func TestExecuteAssignmentNodeNotFound(t *testing.T) {
 	expectedErr := errors.New("node not found")
+	workload := testWorkload("nginx", "default")
 
 	assignmentStore := &fakeAssignmentStore{
-		assignment: testAssignment("nginx", "default", "node-1", "", model.AssignmentStatusPending),
+		assignment: testAssignment(workload, "node-1", "", model.AssignmentStatusPending),
 	}
 
 	workloadStore := &fakeWorkloadStore{
@@ -301,12 +308,44 @@ func TestExecuteAssignmentNodeNotFound(t *testing.T) {
 	}
 }
 
+func TestExecuteAssignment_RejectStaleTemplate(t *testing.T) {
+	workload := testWorkload("nginx", "default")
+	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
+	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
+	// Modify the workload template to create a hash mismatch
+	workload.Spec.Template.Containers[0].Image = "nginx:1.29"
+
+	assignmentStore := &fakeAssignmentStore{assignment: assignment}
+	workloadStore := &fakeWorkloadStore{workload: workload}
+	nodeStore := &fakeNodeStore{node: node}
+	executor := &fakeExecutor{}
+	service := NewService(assignmentStore, workloadStore, nodeStore, executor)
+
+	_, err := service.ExecuteAssignment(context.Background(), assignment.ID)
+
+	if err == nil {
+		t.Fatal("expected error due to template hash mismatch, but got none")
+	}
+
+	if !assignmentStore.updateCalled {
+		t.Fatal("expected assignment execution update to be called")
+	}
+
+	if assignmentStore.updatedStatus != model.AssignmentStatusFailed {
+		t.Fatalf(
+			"expected persisted status %q, got %q",
+			model.AssignmentStatusFailed,
+			assignmentStore.updatedStatus,
+		)
+	}
+}
+
 func TestExecuteAssignmentExecutorFailure(t *testing.T) {
 	executionErr := errors.New("failed to execute container")
 	workload := testWorkload("nginx", "default")
 
 	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment("nginx", "default", node.ID, "", model.AssignmentStatusPending)
+	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -349,7 +388,7 @@ func TestDeleteAssignment(t *testing.T) {
 	ctx := context.Background()
 	workload := testWorkload("nginx", "default")
 	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment("nginx", "default", node.ID, "container-123", model.AssignmentStatusRunning)
+	assignment := testAssignment(workload, node.ID, "container-123", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -377,7 +416,8 @@ func TestDeleteAssignment(t *testing.T) {
 
 func TestDeleteAssignmentNoContainerID(t *testing.T) {
 	ctx := context.Background()
-	assignment := testAssignment("nginx", "default", "node-1", "", model.AssignmentStatusRunning)
+	workload := testWorkload("nginx", "default")
+	assignment := testAssignment(workload, "node-1", "", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	service := NewService(assignmentStore, &fakeWorkloadStore{}, &fakeNodeStore{}, &fakeExecutor{})
@@ -392,7 +432,7 @@ func TestDeleteAssignmentDeleteContainerError(t *testing.T) {
 	ctx := context.Background()
 	workload := testWorkload("nginx", "default")
 	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment("nginx", "default", node.ID, "container-123", model.AssignmentStatusRunning)
+	assignment := testAssignment(workload, node.ID, "container-123", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}

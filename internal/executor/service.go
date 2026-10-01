@@ -41,6 +41,12 @@ func (s *Service) ExecuteAssignment(ctx context.Context, assignmentID string) (m
 		return model.Assignment{}, err
 	}
 
+	currentTemplateHash := model.TemplateHash(workload.Spec.Template)
+	if assignment.TemplateHash != currentTemplateHash {
+		s.assignmentStore.UpdateStatusAssignment(ctx, assignmentID, model.AssignmentStatusFailed)
+		return model.Assignment{}, fmt.Errorf("template hash mismatch for assignment %s: expected %s, got %s", assignmentID, assignment.TemplateHash, currentTemplateHash)
+	}
+
 	node, err := s.nodeStore.GetNode(ctx, assignment.NodeID)
 	if err != nil {
 		return model.Assignment{}, err

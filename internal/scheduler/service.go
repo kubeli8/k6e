@@ -41,10 +41,11 @@ func (s *Service) ScheduleWorkload(ctx context.Context, ref model.WorkloadRef) (
 	}
 
 	assignment := model.Assignment{
-		ID:       uuid.NewString(),
-		Workload: ref,
-		NodeID:   node.ID,
-		Status:   model.AssignmentStatusPending,
+		ID:           uuid.NewString(),
+		Workload:     ref,
+		NodeID:       node.ID,
+		Status:       model.AssignmentStatusPending,
+		TemplateHash: model.TemplateHash(workload.Spec.Template),
 	}
 
 	if err := s.assignmentStore.CreateAssignment(ctx, assignment); err != nil {

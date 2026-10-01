@@ -238,6 +238,7 @@ func (s *SQLiteStore) initializeSchema() error {
 		node_id TEXT NOT NULL,
 		status TEXT NOT NULL,
 		container_id TEXT NOT NULL,
+		template_hash TEXT NOT NULL,
 		FOREIGN KEY (workload_namespace, workload_name)
 			REFERENCES workloads(namespace, name),
 		FOREIGN KEY (node_id)

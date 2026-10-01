@@ -10,11 +10,12 @@ const (
 )
 
 type Assignment struct {
-	ID          string           `json:"id"`
-	Workload    WorkloadRef      `json:"workload"`
-	NodeID      string           `json:"nodeId"`
-	Status      AssignmentStatus `json:"status"`
-	ContainerID string           `json:"containerId"`
+	ID           string           `json:"id"`
+	Workload     WorkloadRef      `json:"workload"`
+	NodeID       string           `json:"nodeId"`
+	Status       AssignmentStatus `json:"status"`
+	ContainerID  string           `json:"containerId"`
+	TemplateHash string           `json:"templateHash"`
 }
 
 type WorkloadRef struct {
