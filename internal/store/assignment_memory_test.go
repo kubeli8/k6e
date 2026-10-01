@@ -5,28 +5,15 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testAssignment(name, namespace, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
-	return model.Assignment{
-		ID: uuid.NewString(),
-		Workload: model.WorkloadRef{
-			Name:      name,
-			Namespace: namespace,
-		},
-		NodeID:      nodeID,
-		Status:      status,
-		ContainerID: containerID,
-	}
-}
 
 func TestAssignmentMemoryStoreCreate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -43,7 +30,7 @@ func TestAssignmentMemoryStoreCreate(t *testing.T) {
 func TestAssignmentMemoryStoreCreateWithoutID(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	assignment.ID = ""
 	err := store.CreateAssignment(ctx, assignment)
 	if err == nil {
@@ -57,7 +44,7 @@ func TestAssignmentMemoryStoreCreateWithoutID(t *testing.T) {
 func TestAssignmentMemoryStoreCreateDuplicate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -74,7 +61,7 @@ func TestAssignmentMemoryStoreCreateDuplicate(t *testing.T) {
 func TestAssignmentMemoryStoreGet(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -104,9 +91,9 @@ func TestAssignmentMemoryStoreGetNotFound(t *testing.T) {
 func TestAssignmentMemoryStoreList(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
-	assignment2 := testAssignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
-	assignment3 := testAssignment("test3", "other", "node3", "container3", model.AssignmentStatusCompleted)
+	assignment1 := testutil.Assignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testutil.Assignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testutil.Assignment("test3", "other", "node3", "container3", model.AssignmentStatusCompleted)
 	err := store.CreateAssignment(ctx, assignment1)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -132,9 +119,9 @@ func TestAssignmentMemoryStoreList(t *testing.T) {
 func TestAssignmentMemoryStoreListForWorkload(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
-	assignment2 := testAssignment("test1", "default", "node2", "container2", model.AssignmentStatusPending)
-	assignment3 := testAssignment("test2", "default", "node3", "container3", model.AssignmentStatusCompleted)
+	assignment1 := testutil.Assignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testutil.Assignment("test1", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testutil.Assignment("test2", "default", "node3", "container3", model.AssignmentStatusCompleted)
 	err := store.CreateAssignment(ctx, assignment1)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -160,7 +147,7 @@ func TestAssignmentMemoryStoreListForWorkload(t *testing.T) {
 func TestAssignmentMemoryStoreUpdateStatus(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -196,7 +183,7 @@ func TestAssignmentMemoryStoreUpdateStatusNotFound(t *testing.T) {
 func TestAssignmentMemoryStoreUpdateExecution(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "", model.AssignmentStatusPending)
+	assignment := testutil.Assignment("test", "default", "node1", "", model.AssignmentStatusPending)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)
@@ -235,7 +222,7 @@ func TestAssignmentMemoryStoreUpdateExecutionNotFound(t *testing.T) {
 func TestAssignmentMemoryStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryAssignmentStore()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	err := store.CreateAssignment(ctx, assignment)
 	if err != nil {
 		t.Fatalf("create, got %v", err)

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 type fakeAssignmentStore struct {
@@ -19,51 +19,6 @@ type fakeAssignmentStore struct {
 	updatedStatus    model.AssignmentStatus
 	getErr           error
 	updateErr        error
-}
-
-func testAssignment(workload model.Workload, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
-	return model.Assignment{
-		ID: uuid.NewString(),
-		Workload: model.WorkloadRef{
-			Name:      workload.Metadata.Name,
-			Namespace: workload.Metadata.Namespace,
-		},
-		NodeID:       nodeID,
-		Status:       status,
-		ContainerID:  containerID,
-		TemplateHash: model.TemplateHash(workload.Spec.Template),
-	}
-}
-
-func testWorkload(name, namespace string) model.Workload {
-	return model.Workload{
-		APIVersion: "k6e.io/v1alpha1",
-		Kind:       "Workload",
-		Metadata: model.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: 2,
-			Template: model.PodTemplateSpec{
-				Containers: []model.ContainerSpec{
-					{
-						Name:  "nginx",
-						Image: "nginx:latest",
-					},
-				},
-			},
-		},
-	}
-}
-
-func testNode(id, address string, status model.NodeStatus) model.Node {
-	return model.Node{
-		ID:            id,
-		Address:       address,
-		Status:        status,
-		LastHeartbeat: time.Now(),
-	}
 }
 
 func (f *fakeAssignmentStore) CreateAssignment(ctx context.Context, assignment model.Assignment) error {
@@ -200,9 +155,9 @@ func (f *fakeExecutor) DeleteContainer(ctx context.Context, node model.Node, con
 func TestExecuteAssignment(t *testing.T) {
 	ctx := context.Background()
 
-	node := testNode("node-1", "127.0.0.1", model.NodeStatusReady)
-	workload := testWorkload("nginx", "default")
-	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
+	node := testutil.NodeAt("node-1", "127.0.0.1", model.NodeStatusReady, time.Now())
+	workload := testutil.Workload("nginx", "default")
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "", model.AssignmentStatusPending)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -260,10 +215,10 @@ func TestExecuteAssignmentAssignmentNotFound(t *testing.T) {
 
 func TestExecuteAssignmentWorkloadNotFound(t *testing.T) {
 	expectedErr := errors.New("workload not found")
-	workload := testWorkload("nginx", "default")
+	workload := testutil.Workload("nginx", "default")
 
 	assignmentStore := &fakeAssignmentStore{
-		assignment: testAssignment(workload, "node-1", "", model.AssignmentStatusPending),
+		assignment: testutil.AssignmentForWorkload(workload, "node-1", "", model.AssignmentStatusPending),
 	}
 
 	workloadStore := &fakeWorkloadStore{getErr: expectedErr}
@@ -283,14 +238,14 @@ func TestExecuteAssignmentWorkloadNotFound(t *testing.T) {
 
 func TestExecuteAssignmentNodeNotFound(t *testing.T) {
 	expectedErr := errors.New("node not found")
-	workload := testWorkload("nginx", "default")
+	workload := testutil.Workload("nginx", "default")
 
 	assignmentStore := &fakeAssignmentStore{
-		assignment: testAssignment(workload, "node-1", "", model.AssignmentStatusPending),
+		assignment: testutil.AssignmentForWorkload(workload, "node-1", "", model.AssignmentStatusPending),
 	}
 
 	workloadStore := &fakeWorkloadStore{
-		workload: testWorkload("nginx", "default"),
+		workload: testutil.Workload("nginx", "default"),
 	}
 
 	nodeStore := &fakeNodeStore{getErr: expectedErr}
@@ -309,9 +264,9 @@ func TestExecuteAssignmentNodeNotFound(t *testing.T) {
 }
 
 func TestExecuteAssignment_RejectStaleTemplate(t *testing.T) {
-	workload := testWorkload("nginx", "default")
-	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
+	workload := testutil.Workload("nginx", "default")
+	node := testutil.NodeAt("node-1", "localhost:8081", model.NodeStatusReady, time.Now())
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "", model.AssignmentStatusPending)
 	// Modify the workload template to create a hash mismatch
 	workload.Spec.Template.Containers[0].Image = "nginx:1.29"
 
@@ -342,10 +297,10 @@ func TestExecuteAssignment_RejectStaleTemplate(t *testing.T) {
 
 func TestExecuteAssignmentExecutorFailure(t *testing.T) {
 	executionErr := errors.New("failed to execute container")
-	workload := testWorkload("nginx", "default")
+	workload := testutil.Workload("nginx", "default")
 
-	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment(workload, node.ID, "", model.AssignmentStatusPending)
+	node := testutil.NodeAt("node-1", "localhost:8081", model.NodeStatusReady, time.Now())
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "", model.AssignmentStatusPending)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -386,9 +341,9 @@ func TestExecuteAssignmentExecutorFailure(t *testing.T) {
 
 func TestDeleteAssignment(t *testing.T) {
 	ctx := context.Background()
-	workload := testWorkload("nginx", "default")
-	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment(workload, node.ID, "container-123", model.AssignmentStatusRunning)
+	workload := testutil.Workload("nginx", "default")
+	node := testutil.NodeAt("node-1", "localhost:8081", model.NodeStatusReady, time.Now())
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "container-123", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}
@@ -416,8 +371,8 @@ func TestDeleteAssignment(t *testing.T) {
 
 func TestDeleteAssignmentNoContainerID(t *testing.T) {
 	ctx := context.Background()
-	workload := testWorkload("nginx", "default")
-	assignment := testAssignment(workload, "node-1", "", model.AssignmentStatusRunning)
+	workload := testutil.Workload("nginx", "default")
+	assignment := testutil.AssignmentForWorkload(workload, "node-1", "", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	service := NewService(assignmentStore, &fakeWorkloadStore{}, &fakeNodeStore{}, &fakeExecutor{})
@@ -430,9 +385,9 @@ func TestDeleteAssignmentNoContainerID(t *testing.T) {
 
 func TestDeleteAssignmentDeleteContainerError(t *testing.T) {
 	ctx := context.Background()
-	workload := testWorkload("nginx", "default")
-	node := testNode("node-1", "localhost:8081", model.NodeStatusReady)
-	assignment := testAssignment(workload, node.ID, "container-123", model.AssignmentStatusRunning)
+	workload := testutil.Workload("nginx", "default")
+	node := testutil.NodeAt("node-1", "localhost:8081", model.NodeStatusReady, time.Now())
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "container-123", model.AssignmentStatusRunning)
 
 	assignmentStore := &fakeAssignmentStore{assignment: assignment}
 	workloadStore := &fakeWorkloadStore{workload: workload}

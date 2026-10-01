@@ -9,6 +9,7 @@ import (
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 type FakeRuntime struct {
@@ -166,7 +167,7 @@ func TestAgentRegister(t *testing.T) {
 
 	ag := New(fakeRuntime, fakeRegistrar, nil)
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
 
 	err := ag.Register(context.Background(), node)
 	if err != nil {
@@ -186,7 +187,7 @@ func TestAgentRegisterWithoutRegistrar(t *testing.T) {
 	fakeRuntime := &FakeRuntime{}
 	ag := New(fakeRuntime, nil, nil)
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
 
 	err := ag.Register(context.Background(), node)
 	if err == nil {

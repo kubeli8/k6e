@@ -6,19 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testNode(id, address string, status model.NodeStatus) model.Node {
-	return model.Node{
-		ID:            id,
-		Address:       address,
-		Status:        status,
-		LastHeartbeat: time.Now(),
-	}
-}
 
 func TestHTTPNodeRegistrarRegister(t *testing.T) {
 	var recieved model.Node
@@ -45,7 +36,7 @@ func TestHTTPNodeRegistrarRegister(t *testing.T) {
 	defer server.Close()
 
 	registrar := NewHTTPNodeRegistrar(server.URL)
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusReady)
 
 	err := registrar.Register(context.Background(), node)
 	if err != nil {
@@ -66,7 +57,7 @@ func TestHTTPNodeRegistrarRegisterServerError(t *testing.T) {
 	defer server.Close()
 
 	registrar := NewHTTPNodeRegistrar(server.URL)
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusReady)
 
 	err := registrar.Register(context.Background(), node)
 	if err == nil {

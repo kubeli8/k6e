@@ -6,20 +6,12 @@ import (
 	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testNode(id, address string, status model.NodeStatus) model.Node {
-	return model.Node{
-		ID:            id,
-		Address:       address,
-		Status:        status,
-		LastHeartbeat: time.Now(),
-	}
-}
 
 func TestNodeMemoryStoreRegister(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -36,7 +28,7 @@ func TestNodeMemoryStoreGetNotFound(t *testing.T) {
 
 func TestNodeMemoryStoreRegisterUpdatesExistingNode(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -65,7 +57,7 @@ func TestNodeMemoryStoreRegisterUpdatesExistingNode(t *testing.T) {
 
 func TestNodeMemoryStoreGet(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -84,8 +76,8 @@ func TestNodeMemoryStoreGet(t *testing.T) {
 func TestNodeMemoryStoreList(t *testing.T) {
 	store := NewMemoryNodeStore()
 	nodes := []model.Node{
-		testNode("node1", "addr:node1", model.NodeStatusReady),
-		testNode("node2", "addr:node2", model.NodeStatusNotReady),
+		testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now()),
+		testutil.NodeAt("node2", "addr:node2", model.NodeStatusNotReady, time.Now()),
 	}
 	for _, node := range nodes {
 		err := store.RegisterNode(context.Background(), node)
@@ -104,7 +96,7 @@ func TestNodeMemoryStoreList(t *testing.T) {
 
 func TestNodeMemoryStoreRemove(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -125,7 +117,7 @@ func TestNodeMemoryStoreRemoveNotFound(t *testing.T) {
 
 func TestNodeMemoryStoreUpdateHeartbeat(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -157,7 +149,7 @@ func TestNodeMemoryStoreUpdateHeartbeatNotFound(t *testing.T) {
 
 func TestNodeMemoryStoreUpdateHeartbeatSetsStatusReady(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusNotReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusNotReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)
@@ -180,7 +172,7 @@ func TestNodeMemoryStoreUpdateHeartbeatSetsStatusReady(t *testing.T) {
 
 func TestNodeMemoryStoreUpdateStatus(t *testing.T) {
 	store := NewMemoryNodeStore()
-	node := testNode("node1", "addr:node1", model.NodeStatusNotReady)
+	node := testutil.NodeAt("node1", "addr:node1", model.NodeStatusNotReady, time.Now())
 	err := store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("register, got %v", err)

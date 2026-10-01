@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 func TestSQLiteStore(t *testing.T) {
@@ -56,7 +57,7 @@ func TestSQLiteStore_Create(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
 	err = store.Create(context.Background(), workload)
 	if err != nil {
@@ -89,7 +90,7 @@ func TestSQLiteStore_CreateDuplicate(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 	ctx := context.Background()
 
 	if err := store.Create(ctx, workload); err != nil {
@@ -117,7 +118,7 @@ func TestSQLiteStore_Get(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 	ctx := context.Background()
 
 	if err := store.Create(ctx, workload); err != nil {
@@ -173,9 +174,9 @@ func TestSQLiteStore_List(t *testing.T) {
 	}()
 
 	ctx := context.Background()
-	workload1 := testWorkload("workload-1", "default")
-	workload2 := testWorkload("workload-2", "default")
-	workload3 := testWorkload("workload-3", "other-namespace")
+	workload1 := testutil.Workload("workload-1", "default")
+	workload2 := testutil.Workload("workload-2", "default")
+	workload3 := testutil.Workload("workload-3", "other-namespace")
 
 	if err := store.Create(ctx, workload1); err != nil {
 		t.Fatalf("failed to create workload1: %v", err)
@@ -208,7 +209,7 @@ func TestSQLiteStore_Update(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 	ctx := context.Background()
 
 	if err := store.Create(ctx, workload); err != nil {
@@ -242,7 +243,7 @@ func TestSQLiteStore_UpdateNotFound(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("nonexistent-workload", "default")
+	workload := testutil.Workload("nonexistent-workload", "default")
 	ctx := context.Background()
 
 	err = store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload)
@@ -265,7 +266,7 @@ func TestSQLiteStore_Delete(t *testing.T) {
 		}
 	}()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 	ctx := context.Background()
 	if err := store.Create(ctx, workload); err != nil {
 		t.Fatalf("failed to create workload: %v", err)

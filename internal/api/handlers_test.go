@@ -14,37 +14,8 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/scheduler"
 	"github.com/pyd-07/k6e/internal/store"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testWorkload(name, namespace string) model.Workload {
-	return model.Workload{
-		APIVersion: "k6e.io/v1alpha1",
-		Kind:       "Workload",
-		Metadata: model.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: 3,
-			Template: model.PodTemplateSpec{
-				Containers: []model.ContainerSpec{
-					{
-						Name:  "nginx",
-						Image: "nginx:latest",
-					},
-				},
-			},
-		},
-	}
-}
-
-func testNode(id, address string, status model.NodeStatus) model.Node {
-	return model.Node{
-		ID:      id,
-		Address: address,
-		Status:  status,
-	}
-}
 
 func testServer() *Server {
 	workloadStore := store.NewMemoryStore()
@@ -182,7 +153,7 @@ func TestCreateWorkloadInvalidData(t *testing.T) {
 func TestCreateWorkloadAlreadyExists(t *testing.T) {
 	server := testServer()
 
-	if err := server.workloadStore.Create(context.Background(), testWorkload("test-workload", "default")); err != nil {
+	if err := server.workloadStore.Create(context.Background(), testutil.WorkloadWithReplicas("test-workload", "default", 3)); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
 
@@ -224,7 +195,7 @@ func TestCreateWorkloadAlreadyExists(t *testing.T) {
 func TestGetWorkload(t *testing.T) {
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 
 	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
@@ -277,9 +248,9 @@ func TestGetWorkloadNotFound(t *testing.T) {
 func TestWorkloadList(t *testing.T) {
 	server := testServer()
 
-	workload1 := testWorkload("test-workload-1", "default")
-	workload2 := testWorkload("test-workload-2", "default")
-	workload3 := testWorkload("other-workload", "production")
+	workload1 := testutil.WorkloadWithReplicas("test-workload-1", "default", 3)
+	workload2 := testutil.WorkloadWithReplicas("test-workload-2", "default", 3)
+	workload3 := testutil.WorkloadWithReplicas("other-workload", "production", 3)
 
 	if err := server.workloadStore.Create(context.Background(), workload1); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
@@ -343,7 +314,7 @@ func TestWorkloadListEmpty(t *testing.T) {
 func TestWorkloadUpdate(t *testing.T) {
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
@@ -435,7 +406,7 @@ func TestWorkloadUpdateNotFound(t *testing.T) {
 func TestWorkloadUpdateIdentityMismatch(t *testing.T) {
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
@@ -477,7 +448,7 @@ func TestWorkloadUpdateIdentityMismatch(t *testing.T) {
 func TestWorkloadDelete(t *testing.T) {
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create initial workload: %v", err)
 	}
@@ -579,7 +550,7 @@ func TestNodeRegistrationWrongData(t *testing.T) {
 
 func TestNodeGet(t *testing.T) {
 	server := testServer()
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusReady)
 	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
 		t.Fatalf("Failed to register node: %v", err)
 	}
@@ -630,8 +601,8 @@ func TestNodeGetNotFound(t *testing.T) {
 
 func TestNodeList(t *testing.T) {
 	server := testServer()
-	node1 := testNode("node-1", "127.0.0.1:8080", model.NodeStatusReady)
-	node2 := testNode("node-2", "172.16.0.1:8080", model.NodeStatusNotReady)
+	node1 := testutil.Node("node-1", "127.0.0.1:8080", model.NodeStatusReady)
+	node2 := testutil.Node("node-2", "172.16.0.1:8080", model.NodeStatusNotReady)
 	if err := server.nodeStore.RegisterNode(context.Background(), node1); err != nil {
 		t.Fatalf("Failed to register node: %v", err)
 	}
@@ -663,7 +634,7 @@ func TestNodeList(t *testing.T) {
 
 func TestNodeRemove(t *testing.T) {
 	server := testServer()
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusReady)
 	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
 		t.Fatalf("Failed to register node: %v", err)
 	}
@@ -704,7 +675,7 @@ func TestNodeRemoveNotFound(t *testing.T) {
 
 func TestNodeUpdateHeartbeat(t *testing.T) {
 	server := testServer()
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
 	if err := server.nodeStore.RegisterNode(context.Background(), node); err != nil {
 		t.Fatalf("Failed to register node: %v", err)
 	}
@@ -751,7 +722,7 @@ func TestScheduleWorkload(t *testing.T) {
 	ctx := context.Background()
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 	if err := server.workloadStore.Create(ctx, workload); err != nil {
 		t.Fatalf("Failed to create workload: %v", err)
 	}
@@ -814,7 +785,7 @@ func TestScheduleWorkloadNotFound(t *testing.T) {
 func TestScheduleWorkloadNoNodes(t *testing.T) {
 	server := testServer()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
 	if err := server.workloadStore.Create(context.Background(), workload); err != nil {
 		t.Fatalf("Failed to create workload: %v", err)
 	}

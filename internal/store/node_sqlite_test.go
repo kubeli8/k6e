@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 func TestSQLiteStore_RegisterNode(t *testing.T) {
@@ -20,7 +21,7 @@ func TestSQLiteStore_RegisterNode(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
 	err = store.RegisterNode(context.Background(), node)
 	if err != nil {
 		t.Fatalf("RegisterNode() error = %v", err)
@@ -39,7 +40,7 @@ func TestSQLiteStore_RegisterNodeUpdatesExistingNode(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusNotReady, time.Now())
 	err = store.RegisterNode(ctx, node)
 	if err != nil {
 		t.Fatalf("RegisterNode() error = %v", err)
@@ -73,7 +74,7 @@ func TestSQLiteStore_GetNode(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
 	err = store.RegisterNode(ctx, node)
 	if err != nil {
 		t.Fatalf("RegisterNode() error = %v", err)
@@ -121,8 +122,8 @@ func TestSQLiteStore_ListNodes(t *testing.T) {
 		}
 	}()
 
-	node1 := testNode("node-1", "127.0.0.1:8080", model.NodeStatusReady)
-	node2 := testNode("node-2", "172.16.0.1:8080", model.NodeStatusNotReady)
+	node1 := testutil.NodeAt("node-1", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
+	node2 := testutil.NodeAt("node-2", "172.16.0.1:8080", model.NodeStatusNotReady, time.Now())
 	if err := store.RegisterNode(ctx, node1); err != nil {
 		t.Fatalf("failed to register node1: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestSQLiteStore_RemoveNode(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusReady, time.Now())
 	if err := store.RegisterNode(ctx, node); err != nil {
 		t.Fatalf("RegisterNode() error = %v", err)
 	}
@@ -201,7 +202,7 @@ func TestSQLiteStore_UpdateHeartbeat(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusNotReady, time.Now())
 	if err := store.RegisterNode(ctx, node); err != nil {
 		t.Fatalf("failed to register node: %v", err)
 	}
@@ -253,7 +254,7 @@ func TestSQLiteStore_UpdateNodeStatus(t *testing.T) {
 		}
 	}()
 
-	node := testNode("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node := testutil.NodeAt("test-node", "127.0.0.1:8080", model.NodeStatusNotReady, time.Now())
 	if err := store.RegisterNode(ctx, node); err != nil {
 		t.Fatalf("failed to register node: %v", err)
 	}

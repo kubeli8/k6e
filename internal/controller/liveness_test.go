@@ -8,22 +8,14 @@ import (
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/store"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testNode(id, address string, status model.NodeStatus, heartbeat time.Time) model.Node {
-	return model.Node{
-		ID:            id,
-		Address:       address,
-		Status:        status,
-		LastHeartbeat: heartbeat,
-	}
-}
 
 func TestLivenessCheckerMarksStaleNodeNotReady(t *testing.T) {
 	ctx := context.Background()
 	nodeStore := store.NewMemoryNodeStore()
 
-	node := testNode(
+	node := testutil.NodeAt(
 		"test-node",
 		"127.0.0.1:8801",
 		model.NodeStatusReady,
@@ -58,7 +50,7 @@ func TestLivenessCheckerLeavesFreshNodeAlone(t *testing.T) {
 	ctx := context.Background()
 	nodeStore := store.NewMemoryNodeStore()
 
-	node := testNode(
+	node := testutil.NodeAt(
 		"test-node",
 		"127.0.0.1:8801",
 		model.NodeStatusReady,
@@ -93,7 +85,7 @@ func TestLivenessCheckerLeavesAlreadyNotReadyNodeAlone(t *testing.T) {
 	ctx := context.Background()
 	nodeStore := store.NewMemoryNodeStore()
 
-	node := testNode(
+	node := testutil.NodeAt(
 		"test-node",
 		"127.0.0.1:8801",
 		model.NodeStatusNotReady,
@@ -177,7 +169,7 @@ func TestLivenessCheckerStart(t *testing.T) {
 
 	nodeStore := store.NewMemoryNodeStore()
 
-	node := testNode(
+	node := testutil.NodeAt(
 		"test-node",
 		"127.0.0.1:8801",
 		model.NodeStatusReady,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 func TestAssignmentSQLiteStoreCreate(t *testing.T) {
@@ -21,7 +22,7 @@ func TestAssignmentSQLiteStoreCreate(t *testing.T) {
 		}
 	}()
 
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {
@@ -48,7 +49,7 @@ func TestAssignmentSQLiteStoreCreateWithoutID(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 	assignment.ID = ""
 
 	err = store.CreateAssignment(ctx, assignment)
@@ -71,7 +72,7 @@ func TestAssignmentSQLiteStoreCreateDuplicate(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {
@@ -98,7 +99,7 @@ func TestAssignmentSQLiteStoreGet(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {
@@ -146,9 +147,9 @@ func TestSQLiteStoreList(t *testing.T) {
 		}
 	}()
 
-	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
-	assignment2 := testAssignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
-	assignment3 := testAssignment("test3", "other", "node3", "container3", model.AssignmentStatusFailed)
+	assignment1 := testutil.Assignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testutil.Assignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testutil.Assignment("test3", "other", "node3", "container3", model.AssignmentStatusFailed)
 
 	err = store.CreateAssignment(ctx, assignment1)
 	if err != nil {
@@ -185,9 +186,9 @@ func TestSQLiteStoreListForWorkload(t *testing.T) {
 		}
 	}()
 
-	assignment1 := testAssignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
-	assignment2 := testAssignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
-	assignment3 := testAssignment("test3", "other", "node3", "container3", model.AssignmentStatusFailed)
+	assignment1 := testutil.Assignment("test1", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment2 := testutil.Assignment("test2", "default", "node2", "container2", model.AssignmentStatusPending)
+	assignment3 := testutil.Assignment("test3", "other", "node3", "container3", model.AssignmentStatusFailed)
 
 	err = store.CreateAssignment(ctx, assignment1)
 	if err != nil {
@@ -248,7 +249,7 @@ func TestSQLiteStoreUpdateStatus(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {
@@ -300,7 +301,7 @@ func TestSQLiteStoreUpdateExecution(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "", model.AssignmentStatusPending)
+	assignment := testutil.Assignment("test", "default", "node1", "", model.AssignmentStatusPending)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {
@@ -356,7 +357,7 @@ func TestSQLiteStoreDelete(t *testing.T) {
 			t.Fatalf("failed to close SQLiteStore: %v", err)
 		}
 	}()
-	assignment := testAssignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
+	assignment := testutil.Assignment("test", "default", "node1", "container1", model.AssignmentStatusRunning)
 
 	err = store.CreateAssignment(ctx, assignment)
 	if err != nil {

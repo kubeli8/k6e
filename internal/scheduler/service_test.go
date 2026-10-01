@@ -8,6 +8,7 @@ import (
 	"github.com/pyd-07/k6e/internal/model"
 	"github.com/pyd-07/k6e/internal/runtime"
 	"github.com/pyd-07/k6e/internal/store"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
 
 type failingAssignmentStore struct {
@@ -52,7 +53,7 @@ func TestServiceScheduleWorkload(t *testing.T) {
 	scheduler := &SimpleScheduler{}
 
 	service := NewService(workloadStore, nodeStore, assignmentStore, scheduler)
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
 	if err := workloadStore.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -109,7 +110,7 @@ func TestServiceScheduleWorkload_NoReadyNodes(t *testing.T) {
 	scheduler := &SimpleScheduler{}
 
 	service := NewService(workloadStore, nodeStore, assignmentStore, scheduler)
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
 	if err := workloadStore.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -165,7 +166,7 @@ func TestServiceScheduleWorkload_AssignmentStoreError(t *testing.T) {
 	scheduler := &SimpleScheduler{}
 
 	service := NewService(workloadStore, nodeStore, assignmentStore, scheduler)
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
 	if err := workloadStore.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)

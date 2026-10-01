@@ -6,35 +6,14 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testWorkload(name, namespace string) model.Workload {
-	return model.Workload{
-		APIVersion: "k6e.io/v1alpha1",
-		Kind:       "Workload",
-		Metadata: model.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: 2,
-			Template: model.PodTemplateSpec{
-				Containers: []model.ContainerSpec{
-					{
-						Name:  "nginx",
-						Image: "nginx:latest",
-					},
-				},
-			},
-		},
-	}
-}
 
 func TestMemoryStoreCreateAndGet(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	want := testWorkload("test-workload", "default")
+	want := testutil.Workload("test-workload", "default")
 
 	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -58,7 +37,7 @@ func TestMemoryStoreDuplicateCreate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	want := testWorkload("test-workload", "default")
+	want := testutil.Workload("test-workload", "default")
 	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -84,7 +63,7 @@ func TestMemoryStoreDelete(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	want := testWorkload("test-workload", "default")
+	want := testutil.Workload("test-workload", "default")
 
 	if err := store.Create(ctx, want); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -116,9 +95,9 @@ func TestMemoryStoreList(t *testing.T) {
 	store := NewMemoryStore()
 
 	workloads := []model.Workload{
-		testWorkload("workload-1", "default"),
-		testWorkload("workload-2", "default"),
-		testWorkload("workload-3", "other-namespace"),
+		testutil.Workload("workload-1", "default"),
+		testutil.Workload("workload-2", "default"),
+		testutil.Workload("workload-3", "other-namespace"),
 	}
 
 	workloads[0].Metadata.Namespace = "default"
@@ -144,7 +123,7 @@ func TestMemoryStoreUpdate(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
 	if err := store.Create(ctx, workload); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -171,7 +150,7 @@ func TestMemoryStoreUpdateNotFound(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
 
-	workload := testWorkload("nonexistent-workload", "default")
+	workload := testutil.Workload("nonexistent-workload", "default")
 
 	err := store.Update(ctx, model.WorkloadRef{Namespace: workload.Metadata.Namespace, Name: workload.Metadata.Name}, workload)
 

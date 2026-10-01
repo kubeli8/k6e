@@ -6,45 +6,16 @@ import (
 	"testing"
 
 	"github.com/pyd-07/k6e/internal/model"
+	"github.com/pyd-07/k6e/internal/testutil"
 )
-
-func testWorkload(name, namespace string) model.Workload {
-	return model.Workload{
-		APIVersion: "k6e.io/v1alpha1",
-		Kind:       "Workload",
-		Metadata: model.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Spec: model.WorkloadSpec{
-			Replicas: 2,
-			Template: model.PodTemplateSpec{
-				Containers: []model.ContainerSpec{
-					{
-						Name:  "nginx",
-						Image: "nginx:latest",
-					},
-				},
-			},
-		},
-	}
-}
-
-func testNode(id, address string, status model.NodeStatus) model.Node {
-	return model.Node{
-		ID:      id,
-		Address: address,
-		Status:  status,
-	}
-}
 
 func TestSimpleScheduler_SelectsReadyNode(t *testing.T) {
 	scheduler := &SimpleScheduler{}
-	workload := testWorkload("test-workload", "default")
+	workload := testutil.Workload("test-workload", "default")
 
-	node1 := testNode("test-node-1", "127.0.0.1:8080", model.NodeStatusNotReady)
-	node2 := testNode("test-node-2", "127.0.0.1:8081", model.NodeStatusReady)
-	node3 := testNode("test-node-3", "127.0.0.1:8082", model.NodeStatusReady)
+	node1 := testutil.Node("test-node-1", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node2 := testutil.Node("test-node-2", "127.0.0.1:8081", model.NodeStatusReady)
+	node3 := testutil.Node("test-node-3", "127.0.0.1:8082", model.NodeStatusReady)
 
 	nodes := []model.Node{node1, node2, node3}
 
@@ -60,10 +31,10 @@ func TestSimpleScheduler_SelectsReadyNode(t *testing.T) {
 
 func TestSimpleScheduler_NoReadyNodes(t *testing.T) {
 	scheduler := &SimpleScheduler{}
-	workload := testWorkload("test-workload", "default")
-	node1 := testNode("test-node-1", "127.0.0.1:8080", model.NodeStatusNotReady)
-	node2 := testNode("test-node-2", "127.0.0.1:8081", model.NodeStatusNotReady)
-	node3 := testNode("test-node-3", "127.0.0.1:8082", model.NodeStatusNotReady)
+	workload := testutil.Workload("test-workload", "default")
+	node1 := testutil.Node("test-node-1", "127.0.0.1:8080", model.NodeStatusNotReady)
+	node2 := testutil.Node("test-node-2", "127.0.0.1:8081", model.NodeStatusNotReady)
+	node3 := testutil.Node("test-node-3", "127.0.0.1:8082", model.NodeStatusNotReady)
 	nodes := []model.Node{node1, node2, node3}
 
 	_, err := scheduler.Schedule(context.Background(), workload, nodes)
@@ -78,10 +49,10 @@ func TestSimpleScheduler_NoReadyNodes(t *testing.T) {
 
 func TestSimpleScheduler_ReturnsFirstReadyNode(t *testing.T) {
 	scheduler := &SimpleScheduler{}
-	workload := testWorkload("test-workload", "default")
-	node1 := testNode("test-node-1", "127.0.0.1:8080", model.NodeStatusReady)
-	node2 := testNode("test-node-2", "127.0.0.1:8081", model.NodeStatusReady)
-	node3 := testNode("test-node-3", "127.0.0.1:8082", model.NodeStatusReady)
+	workload := testutil.Workload("test-workload", "default")
+	node1 := testutil.Node("test-node-1", "127.0.0.1:8080", model.NodeStatusReady)
+	node2 := testutil.Node("test-node-2", "127.0.0.1:8081", model.NodeStatusReady)
+	node3 := testutil.Node("test-node-3", "127.0.0.1:8082", model.NodeStatusReady)
 	nodes := []model.Node{node1, node2, node3}
 
 	selectedNode, err := scheduler.Schedule(context.Background(), workload, nodes)
