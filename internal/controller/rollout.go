@@ -1,6 +1,6 @@
 package controller
 
-import "github.com/pyd-07/k6e/internal/model"
+import "github.com/kubeli8/k6e/internal/model"
 
 // IsAssignmentObsolete reports whether assignment was created from an older
 // version of the workload template. An assignment is considered obsolete when

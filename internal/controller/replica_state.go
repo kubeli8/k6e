@@ -1,6 +1,6 @@
 package controller
 
-import "github.com/pyd-07/k6e/internal/model"
+import "github.com/kubeli8/k6e/internal/model"
 
 // ReplicaState summarizes the current assignment counts for a single workload.
 // It is produced by CalculateReplicaState and consumed by Decide.

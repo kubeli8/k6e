@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
-	"github.com/pyd-07/k6e/internal/testutil"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/testutil"
 )
 
 type fakeAssignmentStore struct {

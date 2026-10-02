@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
 )
 
 // Client is the control-plane-side HTTP client for a node agent. The

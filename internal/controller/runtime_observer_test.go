@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pyd-07/k6e/internal/agentclient"
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/agentclient"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 func TestHTTPRuntimeObserver(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 // Service coordinates the scheduling pipeline: it resolves the workload,

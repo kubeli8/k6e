@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 // LivenessChecker monitors registered nodes and marks them NotReady when they

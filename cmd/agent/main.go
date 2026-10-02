@@ -11,9 +11,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/agent"
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/agent"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
 )
 
 func main() {

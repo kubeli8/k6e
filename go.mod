@@ -1,4 +1,4 @@
-module github.com/pyd-07/k6e
+module github.com/kubeli8/k6e
 
 go 1.26.3
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 )
 
 // MemoryStore is an in-memory WorkloadStore guarded by an RWMutex,

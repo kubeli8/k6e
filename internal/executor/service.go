@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 // Service executes and deletes assignments on behalf of the controller and

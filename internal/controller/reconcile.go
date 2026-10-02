@@ -22,9 +22,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 // ReconcileDecision is the output of Decide: the number of replicas to create
@@ -153,15 +153,11 @@ func (c *Controller) ReconcileAll(ctx context.Context) error {
 }
 
 // Reconcile drives a single workload toward its desired state. It:
-//  1. Inspects each Running assignment that has a ContainerID to detect
-//     containers that have stopped; stopped containers transition to Failed.
-//  2. Calculates the ReplicaState and derives a ReconcileDecision.
-//  3. Schedules and executes new assignments for each missing replica.
-//  4. Deletes running assignments for each excess replica.
-//
-// Reconcile is not idempotent across the scheduler: if scheduling succeeds but
-// execution fails, the pending assignment is left in the store and will be
-// counted as in-flight on the next pass.
+//  1. Observes the runtime state of Running assignments and marks stopped
+//     containers as Failed.
+//  2. Removes Running assignments created from an obsolete workload template.
+//  3. Recalculates the assignment state from the latest persisted snapshot.
+//  4. Creates missing assignments and removes excess running assignments.
 func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error {
 	workload, err := c.workloadStore.Get(ctx, ref)
 	if err != nil {
@@ -173,6 +169,50 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 		return err
 	}
 
+	if err := c.observeAssignments(ctx, assignments); err != nil {
+		return err
+	}
+
+	assignments, err = c.assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+	if err != nil {
+		return err
+	}
+
+	if err := c.reconcileObsoleteAssignments(ctx, workload, assignments); err != nil {
+		return err
+	}
+
+	assignments, err = c.assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+	if err != nil {
+		return err
+	}
+
+	if err := c.reconcileReplicas(ctx, workload, ref, assignments); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ObserveAssignment queries the runtime state of the container associated with
+// assignment by forwarding the request to the RuntimeObserver.
+func (c *Controller) ObserveAssignment(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
+	return c.observer.Inspect(ctx, assignment)
+}
+
+// returnFirstRunningAssignment returns the first running assignment in the list, or nil if none is found.
+func returnFirstRunningAssignment(assignments []model.Assignment) *model.Assignment {
+	for i := range assignments {
+		if assignments[i].Status == model.AssignmentStatusRunning {
+			return &assignments[i]
+		}
+	}
+	return nil
+}
+
+// observeAssignments reconciles the observed runtime state of running
+// assignments with their persisted status.
+func (c *Controller) observeAssignments(ctx context.Context, assignments []model.Assignment) error {
 	for i := range assignments {
 		assignment := &assignments[i]
 		if assignment.Status != model.AssignmentStatusRunning {
@@ -203,7 +243,47 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 		}
 		assignment.Status = newStatus
 	}
+	return nil
+}
 
+// obsoleteAssignments returns the assignments that IsAssignmentObsolete
+// considers stale for currentTemplateHash. It returns nil when no assignment
+// is obsolete.
+func obsoleteAssignments(assignments []model.Assignment, currentTemplateHash string) []model.Assignment {
+	var obsolete []model.Assignment
+
+	for _, assignment := range assignments {
+		if IsAssignmentObsolete(assignment, currentTemplateHash) {
+			obsolete = append(obsolete, assignment)
+		}
+	}
+
+	return obsolete
+}
+
+// reconcileObsoleteAssignments removes running assignments that no longer
+// represent the current workload template.
+func (c *Controller) reconcileObsoleteAssignments(ctx context.Context, workload model.Workload, assignments []model.Assignment) error {
+	currentTemplateHash := model.TemplateHash(workload.Spec.Template)
+	obsolete := obsoleteAssignments(assignments, currentTemplateHash)
+
+	for _, assignment := range obsolete {
+		if c.executor == nil {
+			return fmt.Errorf("assignment executor not configured")
+		}
+
+		if err := c.executor.DeleteAssignment(ctx, assignment.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// reconcileReplicas converges the workload's assigned replicas
+// towards its desirec replica count by creating missing assignments
+// and removing excess running assignments.
+func (c *Controller) reconcileReplicas(ctx context.Context, workload model.Workload, ref model.WorkloadRef, assignments []model.Assignment) error {
 	state := CalculateReplicaState(workload, assignments)
 	decision := Decide(state)
 
@@ -243,34 +323,4 @@ func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error
 	}
 
 	return nil
-}
-
-// ObserveAssignment queries the runtime state of the container associated with
-// assignment by forwarding the request to the RuntimeObserver.
-func (c *Controller) ObserveAssignment(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
-	return c.observer.Inspect(ctx, assignment)
-}
-
-func returnFirstRunningAssignment(assignments []model.Assignment) *model.Assignment {
-	for i := range assignments {
-		if assignments[i].Status == model.AssignmentStatusRunning {
-			return &assignments[i]
-		}
-	}
-	return nil
-}
-
-// obsoleteAssignments returns the assignments that IsAssignmentObsolete
-// considers stale for currentTemplateHash. It returns nil when no assignment
-// is obsolete.
-func obsoleteAssignments(assignments []model.Assignment, currentTemplateHash string) []model.Assignment {
-	var obsolete []model.Assignment
-
-	for _, assignment := range assignments {
-		if IsAssignmentObsolete(assignment, currentTemplateHash) {
-			obsolete = append(obsolete, assignment)
-		}
-	}
-
-	return obsolete
 }

@@ -9,8 +9,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
 )
 
 // Agent is the node-local worker: it wraps a ContainerRuntime for container

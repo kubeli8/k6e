@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 )
 
 // Workload returns a standard workload fixture with a fresh container slice.

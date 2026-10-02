@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 )
 
 // WorkloadStore is the persistence interface for Workload resources.

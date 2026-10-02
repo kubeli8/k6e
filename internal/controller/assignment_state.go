@@ -1,6 +1,6 @@
 package controller
 
-import "github.com/pyd-07/k6e/internal/model"
+import "github.com/kubeli8/k6e/internal/model"
 
 // RuntimeState represents the observed liveness of a container as reported by
 // the node agent.

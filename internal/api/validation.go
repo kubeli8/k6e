@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 )
 
 // validateWorkload checks that a decoded Workload carries the required

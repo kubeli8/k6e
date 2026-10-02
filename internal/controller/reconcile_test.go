@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pyd-07/k6e/internal/model"
-	"github.com/pyd-07/k6e/internal/runtime"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/testutil"
 )
 
 type fakeScheduler struct {
@@ -77,7 +78,9 @@ func newControllerFixture(t *testing.T, replicas int32, assignments []model.Assi
 	workloads := store.NewMemoryStore()
 	assignmentStore := store.NewMemoryAssignmentStore()
 	ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
-	if err := workloads.Create(ctx, model.Workload{Metadata: model.ObjectMeta{Name: ref.Name, Namespace: ref.Namespace}, Spec: model.WorkloadSpec{Replicas: replicas}}); err != nil {
+	workload := testutil.WorkloadWithReplicas(ref.Name, ref.Namespace, replicas)
+
+	if err := workloads.Create(ctx, workload); err != nil {
 		t.Fatal(err)
 	}
 	for _, assignment := range assignments {
@@ -324,7 +327,9 @@ func TestControllerReconcileScaleDown(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
-			ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+			workload := testutil.WorkloadWithReplicas("nginx", "default", int32(tt.desired))
+			ref := testutil.WorkloadRef(workload.Metadata.Name, workload.Metadata.Namespace)
+
 			assignments := make([]model.Assignment, 0, tt.running+tt.pending)
 			for _, item := range []struct {
 				status model.AssignmentStatus
@@ -341,6 +346,7 @@ func TestControllerReconcileScaleDown(t *testing.T) {
 					}
 					if item.status == model.AssignmentStatusRunning {
 						assignment.ContainerID = fmt.Sprintf("container-%d", i)
+						assignment.TemplateHash = model.TemplateHash(workload.Spec.Template)
 					}
 					assignments = append(assignments, assignment)
 				}
@@ -363,11 +369,13 @@ func TestControllerReconcileScaleDown(t *testing.T) {
 
 func TestControllerReconcileScaleDownDeletesRunningAssignments(t *testing.T) {
 	scheduler, executor := &fakeScheduler{}, &fakeAssignmentExecutor{}
-	ref := model.WorkloadRef{Name: "nginx", Namespace: "default"}
+	workload := testutil.WorkloadWithReplicas("nginx", "default", 1)
+	ref := testutil.WorkloadRef(workload.Metadata.Name, workload.Metadata.Namespace)
+	templateHash := model.TemplateHash(workload.Spec.Template)
 	assignments := []model.Assignment{
-		{ID: "running-1", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-1"},
-		{ID: "pending-1", Workload: ref, Status: model.AssignmentStatusPending},
-		{ID: "running-2", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-2"},
+		{ID: "running-1", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-1", TemplateHash: templateHash},
+		{ID: "pending-1", Workload: ref, Status: model.AssignmentStatusPending, ContainerID: "container-3", TemplateHash: templateHash},
+		{ID: "running-2", Workload: ref, Status: model.AssignmentStatusRunning, ContainerID: "container-2", TemplateHash: templateHash},
 	}
 	c, _, _ := newControllerFixture(t, 1, assignments, scheduler, executor, &fakeObserver{info: runtime.ContainerInfo{Running: true}}, time.Second)
 	if err := c.Reconcile(context.Background(), ref); err != nil {

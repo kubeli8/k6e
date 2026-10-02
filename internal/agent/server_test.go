@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/pyd-07/k6e/internal/runtime"
+	"github.com/kubeli8/k6e/internal/runtime"
 )
 
 func TestServerRunContainer(t *testing.T) {

@@ -7,9 +7,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/pyd-07/k6e/internal/executor"
-	"github.com/pyd-07/k6e/internal/scheduler"
-	"github.com/pyd-07/k6e/internal/store"
+	"github.com/kubeli8/k6e/internal/executor"
+	"github.com/kubeli8/k6e/internal/scheduler"
+	"github.com/kubeli8/k6e/internal/store"
 )
 
 // Server hosts the control plane's REST endpoints, backed by the stores and

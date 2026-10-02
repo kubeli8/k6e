@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 )
 
 // ErrNoReadyNodes is returned by a Scheduler when no node with

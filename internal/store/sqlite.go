@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pyd-07/k6e/internal/model"
+	"github.com/kubeli8/k6e/internal/model"
 	_ "modernc.org/sqlite"
 )
 
