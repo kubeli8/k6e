@@ -156,7 +156,7 @@ func (c *Controller) ReconcileAll(ctx context.Context) error {
 //  1. Observes the runtime state of Running assignments and marks stopped
 //     containers as Failed.
 //  2. Removes Running assignments created from an obsolete workload template.
-//  3. Recalculates the assignment state from the latest persisted snapshot.
+//  3. Refreshes the persisted assignment snapshot after state changes.
 //  4. Creates missing assignments and removes excess running assignments.
 func (c *Controller) Reconcile(ctx context.Context, ref model.WorkloadRef) error {
 	workload, err := c.workloadStore.Get(ctx, ref)
@@ -267,11 +267,11 @@ func (c *Controller) reconcileObsoleteAssignments(ctx context.Context, workload 
 	currentTemplateHash := model.TemplateHash(workload.Spec.Template)
 	obsolete := obsoleteAssignments(assignments, currentTemplateHash)
 
-	for _, assignment := range obsolete {
-		if c.executor == nil {
-			return fmt.Errorf("assignment executor not configured")
-		}
+	if c.executor == nil {
+		return fmt.Errorf("assignment executor not configured")
+	}
 
+	for _, assignment := range obsolete {
 		if err := c.executor.DeleteAssignment(ctx, assignment.ID); err != nil {
 			return err
 		}

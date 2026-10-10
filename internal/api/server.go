@@ -60,6 +60,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/nodes/{id}", s.removeNode)
 	mux.HandleFunc("POST /api/v1/nodes/{id}/heartbeat", s.updateNodeHeartbeat)
 
+	// Assignment endpoints
+	mux.HandleFunc("GET /api/v1/assignments/{namespace}/{name}", s.listAssignmentsForWorkload)
+
 	// Scheduler endpoints
 	mux.HandleFunc("POST /api/v1/workloads/{namespace}/{name}/scheduler", s.scheduleWorkload)
 

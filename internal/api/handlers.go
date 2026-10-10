@@ -243,6 +243,26 @@ func (s *Server) updateNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) listAssignmentsForWorkload(w http.ResponseWriter, r *http.Request) {
+	namespace := r.PathValue("namespace")
+	name := r.PathValue("name")
+
+	if strings.TrimSpace(namespace) == "" || strings.TrimSpace(name) == "" {
+		writeError(w, http.StatusBadRequest, "Namespace and name are required")
+		return
+	}
+
+	assignments, err := s.assignmentStore.ListAssignmentsForWorkload(r.Context(), model.WorkloadRef{Namespace: namespace, Name: name})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to list assignments")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(assignments)
+}
+
 func (s *Server) scheduleWorkload(w http.ResponseWriter, r *http.Request) {
 	namespace := r.PathValue("namespace")
 	name := r.PathValue("name")

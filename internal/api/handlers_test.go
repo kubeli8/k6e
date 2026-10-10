@@ -718,6 +718,55 @@ func TestNodeUpdateHeartbeatNotFound(t *testing.T) {
 	}
 }
 
+func TestListAssignmentsForWorkload(t *testing.T) {
+	ctx := context.Background()
+	server := testServer()
+
+	workload := testutil.WorkloadWithReplicas("test-workload", "default", 3)
+	if err := server.workloadStore.Create(ctx, workload); err != nil {
+		t.Fatalf("Failed to create workload: %v", err)
+	}
+
+	node := testutil.Node("test-node", "127.0.0.1:8080", model.NodeStatusNotReady)
+	if err := server.nodeStore.RegisterNode(ctx, node); err != nil {
+		t.Fatalf("Failed to register node: %v", err)
+	}
+
+	assignment := testutil.AssignmentForWorkload(workload, node.ID, "", model.AssignmentStatusPending)
+	if err := server.assignmentStore.CreateAssignment(ctx, assignment); err != nil {
+		t.Fatalf("Failed to create assignment: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/assignments/default/test-workload",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d", http.StatusOK, rec.Code)
+	}
+
+	var assignments []model.Assignment
+	if err := json.NewDecoder(rec.Body).Decode(&assignments); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if len(assignments) != 1 {
+		t.Fatalf("Expected 1 assignment, got %d", len(assignments))
+	}
+
+	if assignments[0].Workload.Namespace != "default" || assignments[0].Workload.Name != "test-workload" {
+		t.Errorf("Expected workload ref {default test-workload}, got {%s %s}", assignments[0].Workload.Namespace, assignments[0].Workload.Name)
+	}
+
+	if assignments[0].Status != model.AssignmentStatusPending {
+		t.Errorf("Expected status %s, got %s", model.AssignmentStatusPending, assignments[0].Status)
+	}
+}
+
 func TestScheduleWorkload(t *testing.T) {
 	ctx := context.Background()
 	server := testServer()

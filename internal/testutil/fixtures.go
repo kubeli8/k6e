@@ -1,4 +1,7 @@
-// Package testutil provides fresh domain fixtures for tests.
+// Package testutil provides fresh domain fixtures for tests, plus shared
+// helpers for subprocess-based integration tests: building binaries, running
+// and cleaning up subprocesses with captured logs, polling conditions, and
+// making JSON HTTP requests against a running control plane.
 package testutil
 
 import (
@@ -63,5 +66,12 @@ func Assignment(name, namespace, nodeID, containerID string, status model.Assign
 func AssignmentForWorkload(workload model.Workload, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
 	assignment := Assignment(workload.Metadata.Name, workload.Metadata.Namespace, nodeID, containerID, status)
 	assignment.TemplateHash = model.TemplateHash(workload.Spec.Template)
+	return assignment
+}
+
+// ObsoleteAssignment returns an assignment whose template hash does not match workload.
+func ObsoleteAssignment(workload model.Workload, nodeID, containerID string, status model.AssignmentStatus) model.Assignment {
+	assignment := Assignment(workload.Metadata.Name, workload.Metadata.Namespace, nodeID, containerID, status)
+	assignment.TemplateHash = "obsolete"
 	return assignment
 }

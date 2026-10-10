@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -36,10 +37,11 @@ func (s *fakeScheduler) ScheduleWorkload(_ context.Context, ref model.WorkloadRe
 }
 
 type fakeAssignmentExecutor struct {
-	calls       int
-	deleteCalls int
-	err         error
-	called      chan<- string
+	calls              int
+	deleteCalls        int
+	deletedAssignments []model.Assignment
+	err                error
+	called             chan<- string
 }
 
 func (e *fakeAssignmentExecutor) ExecuteAssignment(_ context.Context, id string) (model.Assignment, error) {
@@ -55,6 +57,7 @@ func (e *fakeAssignmentExecutor) ExecuteAssignment(_ context.Context, id string)
 
 func (e *fakeAssignmentExecutor) DeleteAssignment(_ context.Context, id string) error {
 	e.deleteCalls++
+	e.deletedAssignments = append(e.deletedAssignments, model.Assignment{ID: id})
 	return e.err
 }
 
@@ -226,6 +229,66 @@ func TestControllerReconcileIsIdempotent(t *testing.T) {
 	}
 	if scheduler.calls != 1 || executor.calls != 1 {
 		t.Fatalf("schedule=%d execute=%d, want one execution", scheduler.calls, executor.calls)
+	}
+}
+
+func TestControllerReconcileObsoleteAssignments(t *testing.T) {
+	ctx := context.Background()
+	workload := testutil.Workload("nginx", "default")
+	deleteErr := errors.New("delete failed")
+
+	tests := []struct {
+		name      string
+		setup     func() ([]model.Assignment, []string)
+		deleteErr error
+		wantErr   error
+	}{
+		{name: "no obsolete assignments", setup: func() ([]model.Assignment, []string) {
+			assignment := testutil.AssignmentForWorkload(workload, "node-1", "container-1", model.AssignmentStatusRunning)
+			return []model.Assignment{assignment}, nil
+		}, wantErr: nil},
+		{name: "one obsolete assignment", setup: func() ([]model.Assignment, []string) {
+			assignemt := testutil.ObsoleteAssignment(workload, "node-1", "container-1", model.AssignmentStatusRunning)
+			return []model.Assignment{assignemt}, []string{assignemt.ID}
+		}, wantErr: nil},
+		{name: "multiple obsolete assignments", setup: func() ([]model.Assignment, []string) {
+			assignemt1 := testutil.ObsoleteAssignment(workload, "node-1", "container-1", model.AssignmentStatusRunning)
+			assignemt2 := testutil.ObsoleteAssignment(workload, "node-2", "container-2", model.AssignmentStatusRunning)
+			return []model.Assignment{assignemt1, assignemt2}, []string{assignemt1.ID, assignemt2.ID}
+		}, wantErr: nil},
+		{name: "non-running assignments are ignored", setup: func() ([]model.Assignment, []string) {
+			assignemt := testutil.ObsoleteAssignment(workload, "node-1", "container-1", model.AssignmentStatusPending)
+			return []model.Assignment{assignemt}, nil
+		}, deleteErr: nil, wantErr: nil},
+		{name: "delete error is propagated", setup: func() ([]model.Assignment, []string) {
+			assignemt := testutil.ObsoleteAssignment(workload, "node-1", "container-1", model.AssignmentStatusRunning)
+			return []model.Assignment{assignemt}, []string{assignemt.ID}
+		}, deleteErr: deleteErr, wantErr: deleteErr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assignments, wantDeleted := tt.setup()
+			executor := &fakeAssignmentExecutor{
+				err: tt.deleteErr,
+			}
+			c, _, _ := newControllerFixture(t, 1, assignments, &fakeScheduler{}, executor, &fakeObserver{}, time.Second)
+
+			err := c.reconcileObsoleteAssignments(ctx, workload, assignments)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("reconcileObsoleteAssignments() error = %v, want %v", err, tt.wantErr)
+			}
+
+			if !reflect.DeepEqual(executor.deletedAssignments, func() []model.Assignment {
+				var deleted []model.Assignment
+				for _, id := range wantDeleted {
+					deleted = append(deleted, model.Assignment{ID: id})
+				}
+				return deleted
+			}()) {
+				t.Fatalf("deleted assignments = %v, want %v", executor.deletedAssignments, wantDeleted)
+			}
+		})
 	}
 }
 

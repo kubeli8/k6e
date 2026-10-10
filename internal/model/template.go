@@ -2,6 +2,7 @@ package model
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 )
 
@@ -21,6 +22,5 @@ func TemplateHash(template PodTemplateSpec) string {
 	}
 
 	hash := sha256.Sum256(data)
-
-	return string(hash[:])
+	return hex.EncodeToString(hash[:])
 }
