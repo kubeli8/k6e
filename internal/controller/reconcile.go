@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -225,6 +226,13 @@ func (c *Controller) observeAssignments(ctx context.Context, assignments []model
 
 		info, err := c.observer.Inspect(ctx, *assignment)
 		if err != nil {
+			if errors.Is(err, ErrNodeUnavailable) {
+				if err := c.assignmentStore.UpdateStatusAssignment(ctx, assignment.ID, model.AssignmentStatusFailed); err != nil {
+					return fmt.Errorf("mark assignment %s failed for unavailable node: %w", assignment.ID, err)
+				}
+				assignment.Status = model.AssignmentStatusFailed
+				continue
+			}
 			return err
 		}
 

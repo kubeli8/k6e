@@ -65,10 +65,15 @@ type fakeObserver struct {
 	calls int
 	info  runtime.ContainerInfo
 	err   error
+
+	inspect func(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error)
 }
 
-func (o *fakeObserver) Inspect(_ context.Context, _ model.Assignment) (runtime.ContainerInfo, error) {
+func (o *fakeObserver) Inspect(ctx context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
 	o.calls++
+	if o.inspect != nil {
+		return o.inspect(ctx, assignment)
+	}
 	if o.err != nil {
 		return runtime.ContainerInfo{}, o.err
 	}
@@ -164,6 +169,142 @@ func TestControllerReconcile(t *testing.T) {
 				t.Fatalf("schedule=%d execute=%d, want %d each", scheduler.calls, executor.calls, tt.expectedSchedules)
 			}
 		})
+	}
+}
+
+func TestControllerReconcileReplacesAssignmentOnUnavailableNode(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(1)
+
+	assgnments := []model.Assignment{
+		{ID: "old", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusRunning, ContainerID: "container-old", NodeID: "node-unavailable"},
+	}
+
+	scheduler := &fakeScheduler{
+		calls: 0,
+	}
+	executor := &fakeAssignmentExecutor{}
+	observer := &fakeObserver{
+		inspect: func(context.Context, model.Assignment) (runtime.ContainerInfo, error) {
+			return runtime.ContainerInfo{}, ErrNodeUnavailable
+		},
+	}
+	c, ref, assignmentStore := newControllerFixture(t, replicas, assgnments, scheduler, executor, observer, time.Second)
+	scheduler.store = assignmentStore
+	if err := c.Reconcile(ctx, ref); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	got, err := assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+	if err != nil {
+		t.Fatalf("ListAssignmentsForWorkload() error = %v", err)
+	}
+
+	var oldFailed, replacementCreated bool
+	for _, a := range got {
+		switch a.ID {
+		case "old":
+			oldFailed = a.Status == model.AssignmentStatusFailed
+		case "assignment-1":
+			replacementCreated = true
+		}
+	}
+	if !oldFailed {
+		t.Fatal("expected old assignment to be failed")
+	}
+	if !replacementCreated {
+		t.Fatal("expected replacement assignment to be created")
+	}
+	if scheduler.calls != 1 {
+		t.Fatalf("ScheduleWorkload() calls = %d, want 1", scheduler.calls)
+	}
+}
+
+func TestControllerReconcileDoesNotFailAssignmentOnUnexpectedInspectionError(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(1)
+	inspectErr := errors.New("unexpected error")
+
+	assignments := []model.Assignment{
+		{ID: "old", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusRunning, ContainerID: "container-old", NodeID: "node-1"},
+	}
+	observer := &fakeObserver{
+		err: inspectErr,
+	}
+
+	controller, ref, assignmentStore := newControllerFixture(t, replicas, assignments, &fakeScheduler{}, &fakeAssignmentExecutor{}, observer, time.Second)
+	err := controller.Reconcile(ctx, ref)
+	if !errors.Is(err, inspectErr) {
+		t.Fatalf("Reconcile() error = %v want %v", err, inspectErr)
+	}
+
+	got, err := assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+	if err != nil {
+		t.Fatalf("ListAssignmentsForWorkload() error = %v", err)
+	}
+
+	if got[0].Status != model.AssignmentStatusRunning {
+		t.Fatalf("expected assignment status to remain running, got %s", got[0].Status)
+	}
+}
+
+func TestControllerReconcileContinuesAfterUnavailableNode(t *testing.T) {
+	ctx := context.Background()
+	replicas := int32(2)
+	assignments := []model.Assignment{
+		{ID: "old-1", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusRunning, ContainerID: "container-old-1", NodeID: "node-unavailable"},
+		{ID: "old-2", Workload: model.WorkloadRef{Name: "nginx", Namespace: "default"}, Status: model.AssignmentStatusRunning, ContainerID: "container-old-2", NodeID: "node-available"},
+	}
+
+	scheduler := &fakeScheduler{}
+	executor := &fakeAssignmentExecutor{}
+	observer := &fakeObserver{
+		inspect: func(_ context.Context, assignment model.Assignment) (runtime.ContainerInfo, error) {
+			if assignment.NodeID == "node-unavailable" {
+				return runtime.ContainerInfo{}, ErrNodeUnavailable
+			}
+			return runtime.ContainerInfo{Running: true}, nil
+		},
+	}
+
+	c, ref, assignmentStore := newControllerFixture(t, replicas, assignments, scheduler, executor, observer, time.Second)
+	scheduler.store = assignmentStore
+	if err := c.Reconcile(ctx, ref); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	got, err := assignmentStore.ListAssignmentsForWorkload(ctx, ref)
+	if err != nil {
+		t.Fatalf("ListAssignmentsForWorkload() error = %v", err)
+	}
+
+	var oldFailed, replacementCreated bool
+	for _, a := range got {
+		switch a.ID {
+		case "old-1":
+			oldFailed = a.Status == model.AssignmentStatusFailed
+		case "assignment-1":
+			replacementCreated = a.Status == model.AssignmentStatusPending
+		case "old-2":
+			if a.Status != model.AssignmentStatusRunning {
+				t.Fatalf("expected old-2 assignment to remain running, got %s", a.Status)
+			}
+		}
+	}
+
+	if !oldFailed {
+		t.Fatal("expected old-1 assignment to be failed")
+	}
+	if !replacementCreated {
+		t.Fatal("expected replacement assignment to be created")
+	}
+	if observer.calls != 2 {
+		t.Fatalf("Inspect() calls = %d, want 2", observer.calls)
+	}
+	if scheduler.calls != 1 {
+		t.Fatalf("ScheduleWorkload() calls = %d, want 1", scheduler.calls)
+	}
+	if executor.calls != 1 {
+		t.Fatalf("ExecuteAssignment() calls = %d, want 1", executor.calls)
 	}
 }
 
